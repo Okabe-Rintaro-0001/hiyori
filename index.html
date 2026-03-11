@@ -1,0 +1,1705 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hiyori Live2D</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #000 url('https://raw.githubusercontent.com/Okabe-Rintaro-0001/hiyori/refs/heads/main/bg.png') no-repeat center center;
+            background-size: cover;
+            font-family: 'Segoe UI', sans-serif;
+            position: relative;
+        }
+
+        body::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.4);
+            z-index: 0;
+        }
+
+        #canvas-container {
+            position: fixed;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100vw;
+            max-width: 480px;
+            height: 100vh;
+            z-index: 1;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        #chat-bar {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 8px;
+            z-index: 100;
+            width: min(90%, 500px);
+            align-items: flex-end;
+        }
+
+        #chat-input {
+            flex: 1;
+            padding: 10px 18px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 18px;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(12px);
+            color: #fff;
+            font-size: 14px;
+            font-family: 'Segoe UI', sans-serif;
+            outline: none;
+            resize: none;
+            overflow-y: auto;
+            max-height: 100px;
+            line-height: 1.4;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+        }
+
+        #chat-input::-webkit-scrollbar {
+            display: none;
+        }
+
+        #chat-input::placeholder {
+            color: rgba(255, 255, 255, 0.35);
+        }
+
+        #chat-input:focus {
+            border-color: rgba(255, 255, 255, 0.3);
+        }
+
+        #send-btn {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 25px;
+            background: rgba(102, 126, 234, 0.6);
+            backdrop-filter: blur(12px);
+            color: #fff;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 80px;
+        }
+
+        #send-btn:hover {
+            background: rgba(102, 126, 234, 0.8);
+        }
+
+        #send-btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+
+        /* Loading spinner */
+        .loading-spinner {
+            width: 18px;
+            height: 18px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        #subtitle {
+            position: fixed;
+            bottom: 0px;
+            left: 0;
+            width: 100vw;
+            max-width: none;
+            transform: none;
+            text-align: center;
+            z-index: 90;
+            /* behind chat bar */
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.4s;
+            background: linear-gradient(to top, rgba(0, 0, 0, 0.95), rgba(0, 0, 0, 0.7) 70%, transparent);
+            padding: 40px 24px 80px;
+            /* 80px bottom padding to clear chat bar */
+            backdrop-filter: blur(2px);
+        }
+
+        #subtitle.visible {
+            opacity: 1;
+        }
+
+        #subtitle-en {
+            color: #fff;
+            font-size: 16px;
+            text-shadow: 0 1px 8px rgba(0, 0, 0, 0.9), 0 0 20px rgba(0, 0, 0, 0.6);
+            line-height: 1.5;
+            margin-bottom: 6px;
+        }
+
+        #subtitle-jp {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 12px;
+            text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9);
+        }
+
+        /* Emoji thought bubble */
+        #emotion-bubble {
+            position: absolute;
+            top: 25%;
+            right: 20%;
+            z-index: 150;
+            pointer-events: none;
+            opacity: 0;
+            transform: scale(0.3) translateY(20px);
+            transition: opacity 0.4s ease, transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        #emotion-bubble.visible {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+        }
+
+        #emotion-bubble .bubble-inner {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            animation: bubble-float 2s ease-in-out infinite;
+            position: relative;
+        }
+
+        #emotion-bubble .bubble-inner::after {
+            content: '';
+            position: absolute;
+            bottom: -8px;
+            left: 8px;
+            width: 12px;
+            height: 12px;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 50%;
+        }
+
+        #emotion-bubble .bubble-inner::before {
+            content: '';
+            position: absolute;
+            bottom: -16px;
+            left: 2px;
+            width: 7px;
+            height: 7px;
+            background: rgba(255, 255, 255, 0.8);
+            border-radius: 50%;
+        }
+
+        @keyframes bubble-float {
+
+            0%,
+            100% {
+                transform: translateY(0);
+            }
+
+            50% {
+                transform: translateY(-6px);
+            }
+        }
+
+        /* Loading overlay */
+        #loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: black;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            z-index: 1000;
+            transition: opacity 0.5s;
+        }
+
+        #loading.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        /* Welcome Screen Modal */
+        #welcome-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(10px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            transition: opacity 0.5s ease;
+        }
+
+        #welcome-screen.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .welcome-card {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
+            transform: translateY(0);
+            transition: transform 0.4s ease;
+        }
+
+        #welcome-screen.hidden .welcome-card {
+            transform: translateY(30px);
+        }
+
+        .welcome-card h1 {
+            color: #333;
+            margin-bottom: 8px;
+            font-size: 24px;
+        }
+
+        .welcome-card p {
+            color: #666;
+            margin-bottom: 20px;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+
+        .auth-toggle {
+            display: flex;
+            margin-bottom: 20px;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .auth-toggle span {
+            font-size: 14px;
+            color: #666;
+            cursor: pointer;
+            padding: 5px 12px;
+            border-radius: 20px;
+            transition: all 0.2s;
+        }
+
+        .auth-toggle span.active {
+            background: #667eea;
+            color: white;
+            font-weight: 600;
+        }
+
+        .auth-group {
+            margin-bottom: 12px;
+            text-align: left;
+        }
+
+        .auth-group label {
+            display: block;
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 4px;
+            margin-left: 8px;
+        }
+
+        .welcome-card input {
+            width: 100%;
+            padding: 12px 18px;
+            border: 2px solid #eee;
+            border-radius: 12px;
+            font-size: 14px;
+            outline: none;
+            transition: all 0.2s;
+            text-align: left;
+        }
+
+        .welcome-card input:focus {
+            border-color: #667eea;
+        }
+
+        /* Password Wrapper for Eye Icon */
+        .password-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .toggle-password {
+            position: absolute;
+            right: 12px;
+            cursor: pointer;
+            color: #888;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 8px;
+            z-index: 5;
+            transition: color 0.2s;
+        }
+
+        .toggle-password:hover {
+            color: #667eea;
+        }
+
+        .toggle-password svg {
+            width: 20px;
+            height: 20px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .welcome-card button {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .welcome-card button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        /* Logout Button - Top Left */
+        #logout-btn {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: 1500;
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 8px 16px;
+            height: 40px;
+            border-radius: 12px;
+            display: none;
+            /* Hidden until login */
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        #logout-btn:hover {
+            background: rgba(255, 255, 255, 0.25);
+            transform: scale(1.1) rotate(-5deg);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+        }
+
+        #logout-btn:active {
+            transform: scale(0.95);
+        }
+
+        /* ─── Chat History Overlay ─── */
+        #chat-history-container {
+            position: fixed;
+            left: 50%;
+            transform: translateX(-50%);
+            width: min(90%, 480px);
+            top: 65px;
+            bottom: 155px;
+            z-index: 60;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            padding: 8px 12px;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+            pointer-events: none;
+            /* enabled by JS once messages exist */
+        }
+
+        #chat-history-container::-webkit-scrollbar {
+            display: none;
+        }
+
+        .chat-bubble {
+            max-width: 78%;
+            padding: 8px 12px;
+            border-radius: 16px;
+            font-size: 13px;
+            line-height: 1.45;
+            word-break: break-word;
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+        }
+
+        .chat-bubble.user {
+            align-self: flex-end;
+            background: rgba(102, 126, 234, 0.85);
+            color: #fff;
+            border-bottom-right-radius: 4px;
+        }
+
+        .chat-bubble.hiyori {
+            align-self: flex-start;
+            background: rgba(30, 30, 50, 0.78);
+            color: #fff;
+            border-bottom-left-radius: 4px;
+            text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+        }
+
+        #history-load-spinner {
+            align-self: center;
+            display: none;
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.25);
+            border-radius: 50%;
+            border-top-color: rgba(255, 255, 255, 0.8);
+            animation: spin 0.8s linear infinite;
+            margin: 4px 0;
+            flex-shrink: 0;
+        }
+
+        #bg-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1500;
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
+            font-size: 16px;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        #bg-btn:hover {
+            background: rgba(255, 255, 255, 0.25);
+            transform: scale(1.1);
+        }
+    </style>
+</head>
+
+<body>
+    <button id="logout-btn" onclick="handleLogout()">Sign Out</button>
+    <div id="welcome-screen">
+        <div class="welcome-card" id="auth-card">
+            <h1>Hiyori's Room 🌸</h1>
+            <p id="auth-status-text">Join Hiyori's world today!</p>
+
+            <div
+                style="background:#fff8e1;border:1px solid #ffe082;border-radius:10px;padding:10px 14px;margin-bottom:16px;text-align:left;font-size:12px;color:#5d4037;line-height:1.6;">
+                <div style="font-weight:700;margin-bottom:4px;">Before you start!</div>
+                <ul style="margin:0;padding-left:16px;">
+                    <li><b>Remember your email & password</b> — Hiyori remembers your chat history only when you log
+                        back in with the same account.</li>
+                    <li>This app runs on <b>free resources</b> — voice & chat may occasionally be unavailable if limits
+                        are reached. Come back later if that happens!</li>
+                </ul>
+            </div>
+
+            <div class="auth-toggle">
+                <span id="toggle-login" class="active" onclick="setAuthMode('login')">Login</span>
+                <span id="toggle-signup" onclick="setAuthMode('signup')">Sign Up</span>
+            </div>
+
+            <div id="signup-fields" style="display: none;">
+                <div class="auth-group">
+                    <label>Unique Username</label>
+                    <input type="text" id="username-input" placeholder="e.g. hiyori_fan" autocomplete="username">
+                </div>
+            </div>
+
+            <div class="auth-group">
+                <label>Email Address</label>
+                <input type="email" id="email-input" placeholder="email@example.com" autocomplete="email">
+            </div>
+
+            <div class="auth-group">
+                <label>Password</label>
+                <div class="password-wrapper">
+                    <input type="password" id="password-input" placeholder="••••••••" autocomplete="current-password">
+                    <div id="toggle-password-btn" class="toggle-password" onclick="togglePasswordVisibility()">
+                        <!-- Eye Icon (Visible by default) -->
+                        <svg id="eye-icon" viewBox="0 0 24 24">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                            <circle cx="12" cy="12" r="3"></circle>
+                        </svg>
+                        <!-- Eye-Off Icon (Hidden by default) -->
+                        <svg id="eye-off-icon" viewBox="0 0 24 24" style="display: none;">
+                            <path
+                                d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24">
+                            </path>
+                            <line x1="1" y1="1" x2="23" y2="23"></line>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+
+            <button id="start-btn" onclick="handleAuth()">Start Chatting</button>
+            <p id="auth-error" style="color: #ff4d4d; margin-top: 15px; font-size: 12px; display: none;"></p>
+        </div>
+    </div>
+
+    <div id="loading">Loading Live2D...</div>
+    <div id="canvas-container">
+        <div id="emotion-bubble">
+            <div class="bubble-inner" id="emotion-emoji">😊</div>
+        </div>
+    </div>
+
+    <div id="chat-history-container">
+        <div id="history-load-spinner"></div>
+    </div>
+
+    <div id="history-init-loader"
+        style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:95;flex-direction:column;align-items:center;gap:10px;background:rgba(0,0,0,0.6);backdrop-filter:blur(6px);padding:20px 28px;border-radius:16px;">
+        <div
+            style="width:36px;height:36px;border:3px solid rgba(255,255,255,0.2);border-top-color:#fff;border-radius:50%;animation:spin 0.8s linear infinite;">
+        </div>
+        <span style="color:#fff;font-size:12px;letter-spacing:0.5px;">Loading chat...</span>
+    </div>
+
+    <div id="subtitle">
+        <div id="subtitle-en"></div>
+    </div>
+
+    <div
+        style="position: fixed; bottom: 72px; left: 50%; transform: translateX(-50%); z-index: 100; display: flex; align-items: center; gap: 5px; font-size: 13px; color: rgba(0,0,0,0.75); white-space: nowrap; pointer-events: none; user-select: none;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+            stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" />
+            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+        </svg>
+        End-to-end encrypted
+    </div>
+    <button id="bg-btn" onclick="cycleBg()" title="Change background">🏠</button>
+    <div id="chat-bar">
+        <textarea id="chat-input" placeholder="Talk to Hiyori..." autocomplete="off" maxlength="500"
+            rows="1"></textarea>
+        <button id="send-btn">Send</button>
+    </div>
+
+    <script src="https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pixi.js@7.3.3/dist/pixi.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pixi-live2d-display@0.4.0/dist/cubism4.min.js"></script>
+
+    <script>
+        // ─── Auth functions defined immediately — before window.onload ───
+        // so they are always available to onclick handlers regardless of CDN load failures
+
+        const BASE_URL = "https://project-qibmt.vercel.app";
+        const AUTH_URL = `${BASE_URL}/auth`;
+
+        // Memory fallback for environments where localStorage is blocked (e.g. SoloLearn iframe)
+        const _mem = {};
+        function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { _mem[k] = v; } }
+        function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return _mem[k] ?? null; } }
+        function lsDel(k) { try { localStorage.removeItem(k); } catch (e) { delete _mem[k]; } }
+
+        function saveSession(idToken, refreshToken, displayName) {
+            lsSet('hiyori_token', idToken);
+            lsSet('hiyori_refresh', refreshToken);
+            lsSet('hiyori_user', displayName);
+            lsSet('hiyori_expiry', Date.now() + 55 * 60 * 1000);
+        }
+
+        function clearSession() {
+            lsDel('hiyori_token');
+            lsDel('hiyori_refresh');
+            lsDel('hiyori_user');
+            lsDel('hiyori_expiry');
+        }
+
+        async function getToken() {
+            const expiry = parseInt(lsGet('hiyori_expiry') || '0');
+            if (Date.now() > expiry) {
+                const refreshToken = lsGet('hiyori_refresh');
+                if (!refreshToken) return null;
+                try {
+                    const res = await fetch(`${AUTH_URL}/refresh`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ refreshToken })
+                    });
+                    if (!res.ok) { clearSession(); return null; }
+                    const data = await res.json();
+                    lsSet('hiyori_token', data.idToken);
+                    lsSet('hiyori_refresh', data.refreshToken);
+                    lsSet('hiyori_expiry', Date.now() + 55 * 60 * 1000);
+                    return data.idToken;
+                } catch (e) { return null; }
+            }
+            return lsGet('hiyori_token');
+        }
+
+        window.getToken = getToken;
+
+        let _authMode = 'login';
+
+        window.setAuthMode = function (mode) {
+            _authMode = mode;
+            document.getElementById('toggle-login').classList.toggle('active', mode === 'login');
+            document.getElementById('toggle-signup').classList.toggle('active', mode === 'signup');
+            document.getElementById('signup-fields').style.display = mode === 'signup' ? 'block' : 'none';
+            document.getElementById('auth-status-text').innerText = mode === 'login' ? "Welcome back to Hiyori's world!" : 'Create your account to meet Hiyori!';
+            document.getElementById('start-btn').innerText = mode === 'login' ? 'Login' : 'Sign Up';
+            document.getElementById('auth-error').style.display = 'none';
+        };
+
+        window.handleAuth = async function () {
+            const email = document.getElementById('email-input').value.trim();
+            const password = document.getElementById('password-input').value.trim();
+            const btn = document.getElementById('start-btn');
+
+            if (!email || !password) {
+                _showAuthError("Please fill in all fields.");
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerText = "Processing...";
+            document.getElementById('auth-error').style.display = 'none';
+
+            try {
+                let data;
+                if (_authMode === 'signup') {
+                    const username = document.getElementById('username-input').value.trim();
+                    if (!username || username.length < 2) {
+                        throw new Error("Please choose a unique username (min 2 characters).");
+                    }
+                    const res = await fetch(`${AUTH_URL}/signup`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email, password, username })
+                    });
+                    data = await res.json();
+                    if (!res.ok) throw new Error(data.error || 'Signup failed');
+                } else {
+                    const res = await fetch(`${AUTH_URL}/login`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email, password })
+                    });
+                    data = await res.json();
+                    if (!res.ok) throw new Error(data.error || 'Login failed');
+                }
+
+                saveSession(data.idToken, data.refreshToken, data.displayName);
+                document.getElementById('logout-btn').style.display = 'flex';
+                document.getElementById('bg-btn').style.display = 'flex';
+                document.getElementById('welcome-screen').classList.add('hidden');
+                if (typeof _startExperience === 'function') _startExperience();
+            } catch (error) {
+                console.error("Auth Error:", error);
+                const msg = (typeof error.message === 'string' && error.message)
+                    ? error.message
+                    : (error.name === 'TypeError' || error instanceof DOMException)
+                        ? 'Network error — make sure you are online and try again.'
+                        : String(error);
+                _showAuthError(msg);
+                btn.disabled = false;
+                btn.innerText = _authMode === 'login' ? 'Login' : 'Sign Up';
+            }
+        };
+
+        window.handleLogout = function () {
+            clearSession();
+            if (window.self !== window.top) {
+                // Iframe environment (SoloLearn) — reload blanks the page, soft-reset instead
+                document.getElementById('logout-btn').style.display = 'none';
+                document.getElementById('bg-btn').style.display = 'none';
+                document.getElementById('welcome-screen').classList.remove('hidden');
+                document.getElementById('email-input').value = '';
+                document.getElementById('password-input').value = '';
+                document.getElementById('auth-error').style.display = 'none';
+                const container = document.getElementById('chat-history-container');
+                container.innerHTML = '<div id="history-load-spinner"></div>';
+                container.style.pointerEvents = 'none';
+            } else {
+                window.location.reload();
+            }
+        };
+
+        window.togglePasswordVisibility = function () {
+            const passwordInput = document.getElementById('password-input');
+            const eyeIcon = document.getElementById('eye-icon');
+            const eyeOffIcon = document.getElementById('eye-off-icon');
+            if (passwordInput.type === 'password') {
+                passwordInput.type = 'text';
+                eyeIcon.style.display = 'none';
+                eyeOffIcon.style.display = 'block';
+            } else {
+                passwordInput.type = 'password';
+                eyeIcon.style.display = 'block';
+                eyeOffIcon.style.display = 'none';
+            }
+        };
+
+        function _showAuthError(msg) {
+            const errorEl = document.getElementById('auth-error');
+            errorEl.innerText = msg;
+            errorEl.style.display = 'block';
+            const card = document.getElementById('auth-card');
+            card.style.transform = 'translateX(-10px)';
+            setTimeout(() => card.style.transform = 'translateX(10px)', 100);
+            setTimeout(() => card.style.transform = 'translateX(0)', 200);
+        }
+
+        window.onload = () => {
+
+            const {
+                Live2DModel
+            } = PIXI.live2d;
+
+            const PROXY_URL = `${BASE_URL}/chat`;
+            const HISTORY_URL = `${BASE_URL}/history`;
+
+            let model = null;
+            let app = null;
+            let userName = lsGet('hiyori_user') || "Guest";
+            let chatHistory = [];
+            let isTalking = false;
+            let talkTickerFn = null;
+
+            let oldestTimestamp = null;   // seconds — cursor for lazy loading older msgs
+            let isLoadingOlderHistory = false;
+            let hasMoreHistory = false;
+            let historyHasMore = false;
+            let isLoadingHistory = false;
+
+            function appendMessage(role, text) {
+                const container = document.getElementById('chat-history-container');
+                container.style.pointerEvents = 'auto'; // enable scrolling once content exists
+                const bubble = document.createElement('div');
+                bubble.classList.add('chat-bubble', role === 'user' ? 'user' : 'hiyori');
+                bubble.textContent = text;
+                container.appendChild(bubble);
+                container.scrollTop = container.scrollHeight;
+            }
+
+            function prependMessages(msgs) {
+                const container = document.getElementById('chat-history-container');
+                const spinner = document.getElementById('history-load-spinner');
+                const prevScrollHeight = container.scrollHeight;
+                const prevScrollTop = container.scrollTop;
+
+                const fragment = document.createDocumentFragment();
+                msgs.forEach(msg => {
+                    if (msg.input) {
+                        const b = document.createElement('div');
+                        b.classList.add('chat-bubble', 'user');
+                        b.textContent = msg.input;
+                        fragment.appendChild(b);
+                    }
+                    if (msg.output) {
+                        const b = document.createElement('div');
+                        b.classList.add('chat-bubble', 'hiyori');
+                        b.textContent = msg.output;
+                        fragment.appendChild(b);
+                    }
+                });
+
+                // Insert right after the spinner so new content appears at the top
+                container.insertBefore(fragment, spinner.nextSibling);
+
+                // Restore scroll position so the view doesn't jump
+                container.scrollTop = prevScrollTop + (container.scrollHeight - prevScrollHeight);
+            }
+
+            async function loadOlderHistory() {
+                if (isLoadingOlderHistory || !hasMoreHistory || !oldestTimestamp) return;
+                isLoadingOlderHistory = true;
+                const spinner = document.getElementById('history-load-spinner');
+                spinner.style.display = 'block';
+                try {
+                    const token = await getToken();
+                    if (!token) return;
+                    const res = await fetch(`${HISTORY_URL}?before=${oldestTimestamp}&limit=20`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (!res.ok) return;
+                    const data = await res.json();
+                    if (data.messages && data.messages.length > 0) {
+                        prependMessages(data.messages);
+                        oldestTimestamp = data.messages[0].timestamp;
+                        hasMoreHistory = data.hasMore || false;
+                    } else {
+                        hasMoreHistory = false;
+                    }
+                } catch (e) {
+                    console.warn("Failed to load older history:", e);
+                } finally {
+                    isLoadingOlderHistory = false;
+                    spinner.style.display = 'none';
+                }
+            }
+
+            // ─── Session check on load ───
+            (async () => {
+                const token = await getToken();
+                if (token) {
+                    document.getElementById('logout-btn').style.display = 'flex';
+                    document.getElementById('bg-btn').style.display = 'flex';
+                    startExperience();
+                }
+            })();
+
+            async function init() {
+
+                const containerW = Math.min(window.innerWidth, 480);
+                app = new PIXI.Application({
+                    width: containerW,
+                    height: window.innerHeight,
+                    backgroundAlpha: 0,
+                    antialias: true,
+                    resolution: window.devicePixelRatio || 1,
+                    autoDensity: true,
+                });
+
+                document.getElementById('canvas-container').appendChild(app.view);
+
+                model = await Live2DModel.from(
+                    'https://raw.githubusercontent.com/PhyG0/hiyori/main/runtime/hiyori_free_t08.model3.json', {
+                    autoInteract: false
+                }
+                );
+
+                if (model.internalModel.eyeBlink) {
+                    model.internalModel.eyeBlink = null;
+                }
+
+                fitModel();
+                app.stage.addChild(model);
+
+                document.getElementById('loading').classList.add('hidden');
+
+                // All animation is driven by the lively ticker — no motion clips needed
+                startLivelyTicker();
+            }
+
+            // Removed redundant listener as it is already in the HTML onclick attribute
+
+            async function startExperience() {
+                document.getElementById('welcome-screen').classList.add('hidden');
+
+                window.unlockAudio();
+
+                const spinner = document.getElementById('history-init-loader');
+                spinner.style.display = 'flex';
+                try {
+                    const token = await getToken();
+                    if (!token) return;
+                    const histRes = await fetch(HISTORY_URL, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (histRes.ok) {
+                        const histData = await histRes.json();
+                        if (histData.history && histData.history.length > 0) {
+                            chatHistory = histData.history;
+                            trimHistory();
+                        }
+                        if (histData.messages && histData.messages.length > 0) {
+                            histData.messages.forEach(msg => {
+                                if (msg.input) appendMessage('user', msg.input);
+                                if (msg.output) appendMessage('hiyori', msg.output);
+                            });
+                            oldestTimestamp = histData.messages[0].timestamp;
+                            hasMoreHistory = histData.hasMore || false;
+                        }
+                    }
+                } catch (histErr) {
+                    console.warn("Could not load chat history:", histErr);
+                } finally {
+                    spinner.style.display = 'none';
+                }
+
+                // Focus input after login
+                setTimeout(() => {
+                    document.getElementById('chat-input').focus();
+                }, 500);
+            }
+
+            const EMOTION_MAP = {
+                happy: { eyeSmile: 1.0, browForm: 0.5, mouthForm: 1.0, cheek: 0.0, emoji: '😊' },
+                sad: { eyeSmile: 0.0, browForm: -0.7, mouthForm: -0.8, cheek: 0.0, emoji: '😢' },
+                angry: { eyeSmile: 0.0, browForm: -1.0, mouthForm: -0.5, cheek: 0.0, emoji: '😠' },
+                playful: { eyeSmile: 0.8, browForm: 0.3, mouthForm: 0.7, cheek: 0.5, emoji: '😜' },
+                surprised: { eyeSmile: 0.0, browForm: 0.8, mouthForm: 0.0, cheek: 0.0, emoji: '😲' },
+                shy: { eyeSmile: 0.5, browForm: 0.0, mouthForm: 0.3, cheek: 1.0, emoji: '😳' },
+                neutral: { eyeSmile: 0.0, browForm: 0.0, mouthForm: 0.0, cheek: 0.0, emoji: null },
+            };
+
+            // Current & target emotion parameter values for smooth lerping
+            let emotionCurrent = { eyeSmile: 0, browForm: 0, mouthForm: 0, cheek: 0 };
+            let emotionTarget = { eyeSmile: 0, browForm: 0, mouthForm: 0, cheek: 0 };
+            const LERP_SPEED = 0.06; // per frame (smooth blend — lower = smoother)
+
+            // Smooth mouth open value (used for talking)
+            let mouthOpenCurrent = 0;
+            let mouthOpenTarget = 0;
+            const MOUTH_LERP_SPEED = 0.15;
+
+            function lerp(a, b, t) {
+                return a + (b - a) * t;
+            }
+
+            window.setEmotion = function (emotionName) {
+                const em = EMOTION_MAP[emotionName] || EMOTION_MAP.neutral;
+                emotionTarget.eyeSmile = em.eyeSmile;
+                emotionTarget.browForm = em.browForm;
+                emotionTarget.mouthForm = em.mouthForm;
+                emotionTarget.cheek = em.cheek;
+
+                // Show / hide emoji bubble
+                const bubble = document.getElementById('emotion-bubble');
+                const emojiEl = document.getElementById('emotion-emoji');
+                if (em.emoji) {
+                    emojiEl.textContent = em.emoji;
+                    bubble.classList.add('visible');
+                } else {
+                    bubble.classList.remove('visible');
+                }
+            };
+
+            window.clearEmotion = function () {
+                emotionTarget = { eyeSmile: 0, browForm: 0, mouthForm: 0, cheek: 0 };
+                document.getElementById('emotion-bubble').classList.remove('visible');
+            }
+
+            function startLivelyTicker() {
+                let blinkTimer = 0;
+                let blinkState = 0;
+
+                // Smooth head sway targets (for gradual drift changes)
+                let headSwayPhase = Math.random() * Math.PI * 2;
+
+                // Idle emotion trigger
+                const IDLE_EMOTIONS = ['happy', 'playful', 'shy', 'surprised'];
+                let idleEmotionTimer = 15 + Math.random() * 20;
+                let idleEmotionActive = false;
+
+                app.ticker.add((delta) => {
+                    if (!model) return;
+
+                    const dt = delta / 60; // seconds
+                    const t = Date.now() / 1000;
+                    const core = model.internalModel.coreModel;
+
+                    // Smooth-lerp emotion parameters each frame
+                    emotionCurrent.eyeSmile = lerp(emotionCurrent.eyeSmile, emotionTarget.eyeSmile, LERP_SPEED);
+                    emotionCurrent.browForm = lerp(emotionCurrent.browForm, emotionTarget.browForm, LERP_SPEED);
+                    emotionCurrent.mouthForm = lerp(emotionCurrent.mouthForm, emotionTarget.mouthForm, LERP_SPEED);
+                    emotionCurrent.cheek = lerp(emotionCurrent.cheek, emotionTarget.cheek, LERP_SPEED);
+
+                    // Apply emotion to face
+                    core.setParameterValueById('ParamEyeLSmile', emotionCurrent.eyeSmile);
+                    core.setParameterValueById('ParamEyeRSmile', emotionCurrent.eyeSmile);
+                    core.setParameterValueById('ParamBrowLForm', emotionCurrent.browForm);
+                    core.setParameterValueById('ParamBrowRForm', emotionCurrent.browForm);
+                    core.setParameterValueById('ParamMouthForm', emotionCurrent.mouthForm);
+                    core.setParameterValueById('ParamCheek', emotionCurrent.cheek);
+
+                    // Smooth organic head sway (multiple layered sine waves)
+                    const headX = Math.sin(t * 0.35) * 6 + Math.sin(t * 0.13) * 3 + Math.sin(t * 0.07) * 2;
+                    const headY = Math.sin(t * 0.28) * 4 + Math.sin(t * 0.17) * 2;
+                    const headZ = Math.sin(t * 0.2) * 4 + Math.sin(t * 0.09) * 2;
+
+                    core.setParameterValueById('ParamAngleX', headX);
+                    core.setParameterValueById('ParamAngleY', headY);
+                    core.setParameterValueById('ParamAngleZ', headZ);
+
+                    core.setParameterValueById('ParamBodyAngleX', headX * 0.2);
+                    core.setParameterValueById('ParamBodyAngleZ', headZ * 0.12);
+
+                    core.setParameterValueById('ParamBreath', (Math.sin(t * 0.7) + 1) / 2);
+
+                    // Smooth mouth open lerp (talking or idle)
+                    mouthOpenCurrent = lerp(mouthOpenCurrent, mouthOpenTarget, MOUTH_LERP_SPEED);
+                    core.setParameterValueById('ParamMouthOpenY', mouthOpenCurrent);
+
+                    // Idle emotion triggers (random bursts of expression)
+                    if (!isTalking && !touchCooldown && !idleEmotionActive) {
+                        idleEmotionTimer -= dt;
+                        if (idleEmotionTimer <= 0) {
+                            idleEmotionActive = true;
+                            const em = IDLE_EMOTIONS[Math.floor(Math.random() * IDLE_EMOTIONS.length)];
+                            window.setEmotion(em);
+                            setTimeout(() => {
+                                window.clearEmotion();
+                                idleEmotionActive = false;
+                                idleEmotionTimer = 20 + Math.random() * 25;
+                            }, 3000 + Math.random() * 2000);
+                        }
+                    }
+
+                    // Blinking — only when NOT mid-blink-motion-conflict
+                    blinkTimer -= dt;
+
+                    if (blinkState === 0 && blinkTimer <= 0) {
+                        blinkState = 1;
+                        blinkTimer = 0.1; // closing duration
+                    } else if (blinkState === 1) {
+                        const progress = 1 - (blinkTimer / 0.1);
+                        const v = Math.max(0, 1 - progress);
+                        core.setParameterValueById('ParamEyeLOpen', v);
+                        core.setParameterValueById('ParamEyeROpen', v);
+                        if (blinkTimer <= 0) {
+                            blinkState = 2;
+                            blinkTimer = 0.12; // opening duration
+                        }
+                    } else if (blinkState === 2) {
+                        const progress = 1 - (blinkTimer / 0.12);
+                        const v = Math.min(1, progress);
+                        core.setParameterValueById('ParamEyeLOpen', v);
+                        core.setParameterValueById('ParamEyeROpen', v);
+                        if (blinkTimer <= 0) {
+                            blinkState = 0;
+                            blinkTimer = 2.5 + Math.random() * 4;
+                            core.setParameterValueById('ParamEyeLOpen', 1);
+                            core.setParameterValueById('ParamEyeROpen', 1);
+                        }
+                    }
+                });
+            }
+
+            window.startTalking = function () {
+                if (!model || isTalking) return;
+                isTalking = true;
+
+                // Use a ticker to smoothly animate mouth based on speech patterns
+                // mouthOpenTarget is updated each frame; the main ticker lerps it smoothly
+                talkTickerFn = () => {
+                    if (!model || !isTalking) return;
+                    const t = Date.now() * 0.001;
+                    // Layered sine waves for organic mouth movement
+                    const wave1 = Math.abs(Math.sin(t * 9.5)) * 0.45;
+                    const wave2 = Math.abs(Math.sin(t * 6.3)) * 0.25;
+                    const wave3 = Math.abs(Math.sin(t * 3.1)) * 0.15;
+                    const burst = Math.random() > 0.8 ? Math.random() * 0.2 : 0;
+                    mouthOpenTarget = Math.min(1, wave1 + wave2 + wave3 + burst + 0.1);
+                };
+
+                app.ticker.add(talkTickerFn);
+            };
+
+            window.stopTalking = function () {
+                if (!isTalking) return;
+                isTalking = false;
+
+                if (talkTickerFn) {
+                    app.ticker.remove(talkTickerFn);
+                    talkTickerFn = null;
+                }
+
+                // Smoothly close mouth (lerped in the main ticker)
+                mouthOpenTarget = 0;
+
+                // Smoothly fade emotion back to neutral
+                window.clearEmotion();
+            };
+
+            function fitModel() {
+                if (!model || !app) return;
+
+                const w = app.screen.width;
+                const h = app.screen.height;
+
+                // To ensure knees are visible but still zoomed in decently,
+                // we scale her up a bit more.
+                const scaleY = h / model.height;
+                const scaleX = w / model.width;
+
+                // Increase the multiplier to zoom her in up to the knees
+                const scale = Math.min(scaleX, scaleY) * 1.7;
+
+                model.scale.set(scale);
+                model.anchor.set(0.5, 0.5);
+
+                // Center horizontally
+                model.x = w / 2;
+
+                // Shift her down so her knees hit the bottom of the screen
+                model.y = (h / 2) + (h * 0.35);
+            }
+
+            function trimHistory() {
+                if (chatHistory.length > MAX_HISTORY) {
+                    chatHistory = chatHistory.slice(-MAX_HISTORY);
+                }
+            }
+
+            const MAX_HISTORY = 50;
+
+            async function askLLM(userMessage) {
+                if (userMessage.length < 2) return;
+
+                chatHistory.push({
+                    role: "user",
+                    content: userMessage
+                });
+                trimHistory();
+
+                const body = {
+                    messages: chatHistory,
+                    user: userName // Send the username to the backend
+                };
+
+                const token = await getToken();
+
+                const res = await fetch(PROXY_URL, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${token}`
+                    },
+                    body: JSON.stringify(body)
+                });
+
+                if (!res.ok) {
+                    chatHistory.pop();
+                    throw new Error(`Groq API Error: ${res.status} ${res.statusText}`);
+                }
+
+                const data = await res.json();
+                let raw = data.choices?.[0]?.message?.content || "";
+                // console.log("LLM raw:", raw);
+
+                // Strip thinking tags, code fences, etc.
+                raw = raw.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+                const jsonMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/) || raw.match(/(\{[\s\S]*\})/);
+                if (jsonMatch) raw = jsonMatch[1].trim();
+
+                let reply = {
+                    reply_en: "",
+                    emotion: "neutral"
+                };
+
+                try {
+                    const parsed = JSON.parse(raw);
+                    reply.reply_en = parsed.reply_en || parsed.reply || "";
+                    reply.emotion = parsed.emotion || "neutral";
+                } catch (e) {
+                    reply.reply_en = raw.replace(/[{}\"`]/g, "").trim();
+                }
+
+                if (reply.reply_en) {
+                    chatHistory.push({
+                        role: "assistant",
+                        content: raw
+                    });
+                    trimHistory();
+                } else {
+                    chatHistory.pop();
+                    throw new Error("Empty response from LLM");
+                }
+
+                return reply;
+            }
+
+            // Subtitle priority: audio/TTS > touch reactions
+            let subtitleLocked = false;
+
+            window.showSubtitle = function (en, jp, priority = false) {
+                // If subtitle is locked by audio and this is not a priority call, skip
+                if (subtitleLocked && !priority) return;
+
+                const el = document.getElementById('subtitle');
+                document.getElementById('subtitle-en').textContent = en;
+                el.classList.add('visible');
+
+                if (priority) subtitleLocked = true;
+            };
+
+            window.hideSubtitle = function (unlock = false) {
+                // Don't let touch timeouts hide priority (audio) subtitles
+                if (subtitleLocked && !unlock) return;
+                document.getElementById('subtitle').classList.remove('visible');
+                if (unlock) subtitleLocked = false;
+            };
+
+            // ─── Touch-response system ───
+            // Maps click/tap position to body zones and triggers reactions
+            const TOUCH_REACTIONS = {
+                head: {
+                    emotion: 'happy',
+                    responses: [
+                        { en: "Hehe~ that tickles!", jp: "えへへ〜くすぐったい！" },
+                        { en: "Pat pat~ I like that!", jp: "なでなで〜好き！" },
+                        { en: "Mmm~ head pats are the best~", jp: "んー〜頭なでなでが一番好き〜" },
+                    ]
+                },
+                face: {
+                    emotion: 'shy',
+                    responses: [
+                        { en: "W-what are you doing?!", jp: "な、何してるの？！" },
+                        { en: "My face... don't stare so close!", jp: "顔…そんな近くで見ないで！" },
+                        { en: "Ehh~ you're making me blush!", jp: "えぇ〜赤くなっちゃう！" },
+                    ]
+                },
+                chest: {
+                    emotion: 'angry',
+                    responses: [
+                        { en: "H-HEY! Where do you think you're touching?!", jp: "ちょ、ちょっと！どこ触ってるの？！" },
+                        { en: "Don't touch there, pervert!!", jp: "そこ触らないで、変態！！" },
+                        { en: "I-I'll seriously get mad!!", jp: "ほ、本気で怒るよ！！" },
+                    ]
+                },
+                skirt: {
+                    emotion: 'shy',
+                    responses: [
+                        { en: "D-don't touch my skirt!", jp: "ス、スカート触らないで！" },
+                        { en: "Hey!! That's off limits!!", jp: "ちょっと！！そこはダメ！！" },
+                        { en: "W-what are you trying to do?!", jp: "な、何しようとしてるの？！" },
+                    ]
+                },
+                arm: {
+                    emotion: 'surprised',
+                    responses: [
+                        { en: "Hmm? What's up?", jp: "ん？どうしたの？" },
+                        { en: "Oh? You want my attention?", jp: "あら？かまってほしいの？" },
+                        { en: "Poking me, huh~?", jp: "つんつんしてるの〜？" },
+                    ]
+                },
+                body: {
+                    emotion: 'surprised',
+                    responses: [
+                        { en: "Hmm? Don't just poke me randomly!", jp: "ん？適当につつかないで！" },
+                        { en: "What~? Need something?", jp: "なに〜？用があるの？" },
+                        { en: "Hey! That startled me!", jp: "もう！びっくりした！" },
+                    ]
+                }
+            };
+
+            let touchCooldown = false;
+
+            function getTouchZone(localX, localY) {
+                // localX, localY are normalized to model space: (0,0) = top-left, (1,1) = bottom-right
+                // Adjusted for the zoomed-out view showing more of the character
+
+                if (localY < 0.18) return 'head';          // top of head
+                if (localY < 0.30) return 'face';           // face area
+                if (localY < 0.42) {
+                    // Chest vs arm — arms are on the sides
+                    if (localX < 0.28 || localX > 0.72) return 'arm';
+                    return 'chest';
+                }
+                if (localY < 0.58) {
+                    if (localX < 0.22 || localX > 0.78) return 'arm';
+                    return 'skirt';
+                }
+                return 'body'; // legs / below
+            }
+
+            function handleTouch(screenX, screenY) {
+                if (!model || touchCooldown || isTalking || subtitleLocked) return;
+
+                // Convert screen coords to model-local normalized coords
+                const bounds = model.getBounds();
+                const localX = (screenX - bounds.x) / bounds.width;
+                const localY = (screenY - bounds.y) / bounds.height;
+
+                // Check if click is within model bounds
+                if (localX < 0 || localX > 1 || localY < 0 || localY > 1) return;
+
+                const zone = getTouchZone(localX, localY);
+                const reaction = TOUCH_REACTIONS[zone];
+                if (!reaction) return;
+
+                // Pick a random response
+                const resp = reaction.responses[Math.floor(Math.random() * reaction.responses.length)];
+
+                // Set emotion
+                window.setEmotion(reaction.emotion);
+
+                // Show subtitle
+                window.showSubtitle(resp.en, resp.jp);
+
+                // Auto-hide after 2.5s and return to neutral
+                touchCooldown = true;
+                setTimeout(() => {
+                    window.hideSubtitle();
+                    window.clearEmotion();
+                    touchCooldown = false;
+                }, 2500);
+            }
+
+            // Listen for clicks/taps on the canvas container
+            document.getElementById('canvas-container').addEventListener('pointerdown', (e) => {
+                // Get position relative to the PIXI canvas
+                const rect = app.view.getBoundingClientRect();
+                const scaleX = app.screen.width / rect.width;
+                const scaleY = app.screen.height / rect.height;
+                const screenX = (e.clientX - rect.left) * scaleX;
+                const screenY = (e.clientY - rect.top) * scaleY;
+                handleTouch(screenX, screenY);
+            });
+
+            // ─── Chat Overlay Rendering ───
+            function renderMessageToOverlay(userText, assistantText, timestamp, atBottom = true) {
+                const container = document.getElementById('chat-history-overlay');
+                const timeStr = new Date(timestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+                function makeBubble(wrapClass, bodyText, metaText) {
+                    const wrap = document.createElement('div');
+                    wrap.className = wrapClass;
+                    const body = document.createElement('div');
+                    body.className = 'chat-bubble-v2';
+                    body.textContent = bodyText;
+                    const meta = document.createElement('div');
+                    meta.className = 'chat-bubble-meta';
+                    meta.textContent = metaText;
+                    wrap.appendChild(body);
+                    wrap.appendChild(meta);
+                    return wrap;
+                }
+
+                // 1. Render User Message if exists
+                if (userText) {
+                    const userWrap = makeBubble('chat-bubble-wrapper user', userText, `${userName} • ${timeStr}`);
+                    if (atBottom) container.appendChild(userWrap);
+                    else container.prepend(userWrap);
+                }
+
+                // 2. Render Assistant Message if exists
+                if (assistantText) {
+                    const aiWrap = makeBubble('chat-bubble-wrapper assistant', assistantText, `Hiyori • ${timeStr}`);
+                    if (atBottom) container.appendChild(aiWrap);
+                    else container.prepend(aiWrap);
+                }
+
+                if (atBottom) container.scrollTop = container.scrollHeight;
+            }
+
+            async function loadMoreHistory() {
+                if (!historyHasMore || isLoadingHistory || !oldestTimestamp) return;
+
+                isLoadingHistory = true;
+                const container = document.getElementById('chat-history-overlay');
+                const oldScrollHeight = container.scrollHeight;
+
+                // Add temporary indicator at top
+                const loadingIndicator = document.createElement('div');
+                loadingIndicator.className = 'history-loading';
+                loadingIndicator.textContent = "Loading older messages...";
+                container.prepend(loadingIndicator);
+
+                try {
+                    const res = await fetch(`${HISTORY_URL}?before=${oldestTimestamp}&limit=20`, {
+                        headers: { 'Authorization': `Bearer ${currentToken}` }
+                    });
+                    loadingIndicator.remove();
+
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data.messages && data.messages.length > 0) {
+                            // Prepend in reverse to maintain temporal order
+                            // (data.messages is oldest first)
+                            const reversed = [...data.messages].reverse();
+                            reversed.forEach(msg => {
+                                renderMessageToOverlay(msg.input, msg.output, msg.timestamp, false);
+                            });
+
+                            oldestTimestamp = data.messages[0].timestamp;
+                            historyHasMore = data.hasMore;
+
+                            // Adjust scroll to maintain position
+                            const newScrollHeight = container.scrollHeight;
+                            container.scrollTop = newScrollHeight - oldScrollHeight;
+                        } else {
+                            historyHasMore = false;
+                        }
+                    }
+                } catch (e) {
+                    console.error("Pagination failed:", e);
+                    loadingIndicator.remove();
+                } finally {
+                    isLoadingHistory = false;
+                }
+            }
+
+            window._startExperience = startExperience;
+
+            // ── Background Switcher ──
+            const BACKGROUNDS = [
+                `url('https://raw.githubusercontent.com/Okabe-Rintaro-0001/hiyori/refs/heads/main/bg.png')`,
+                `url('https://raw.githubusercontent.com/Okabe-Rintaro-0001/hiyori/refs/heads/main/webler_basement_bg.png')`
+            ];
+            let bgIndex = 0;
+            window.cycleBg = function () {
+                bgIndex = (bgIndex + 1) % BACKGROUNDS.length;
+                document.body.style.backgroundImage = BACKGROUNDS[bgIndex];
+            };
+
+            init();
+
+            // Lazy-load older messages when the user scrolls to the top
+            document.getElementById('chat-history-container').addEventListener('scroll', function () {
+                if (this.scrollTop === 0 && !isLoadingOlderHistory && hasMoreHistory) {
+                    loadOlderHistory();
+                }
+            });
+
+            const chatInput = document.getElementById('chat-input');
+            const sendBtn = document.getElementById('send-btn');
+
+            // Textarea auto-resize
+            chatInput.addEventListener('input', function () {
+                this.style.height = 'auto';
+                this.style.height = Math.min(this.scrollHeight, 100) + 'px';
+            });
+
+            async function handleSend() {
+                const text = chatInput.value.trim();
+                if (!text) return;
+
+                window.unlockAudio();
+
+                window.stopCurrentAudio();
+
+                chatInput.value = "";
+                chatInput.style.height = 'auto';
+                sendBtn.disabled = true;
+                sendBtn.innerHTML = '<div class="loading-spinner"></div>';
+
+                appendMessage('user', text);
+
+                try {
+                    const reply = await askLLM(text);
+                    const ttsText = reply.reply_en;
+
+                    if (ttsText) {
+                        await window.speakText(
+                            ttsText,
+                            undefined,
+                            "English",
+                            undefined,
+                            reply.reply_en,
+                            reply.reply_en,
+                            reply.emotion || 'neutral',
+                            () => appendMessage('hiyori', ttsText)
+                        );
+                    }
+
+                } catch (err) {
+                    console.error(err);
+                    window.showSubtitle("Something went wrong...", "");
+                    setTimeout(window.hideSubtitle, 3000);
+                } finally {
+                    sendBtn.disabled = false;
+                    sendBtn.textContent = "Send";
+                }
+            }
+
+            sendBtn.addEventListener('click', handleSend);
+
+            chatInput.addEventListener('keydown', (e) => {
+                if (e.key === "Enter" && !e.shiftKey && !sendBtn.disabled) {
+                    e.preventDefault();
+                    handleSend();
+                }
+            });
+
+        };
+    </script>
+
+    <script type="module">
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        let currentSource = null;
+        let isPlaying = false;
+
+        const TTS_URL = "https://project-qibmt.vercel.app/tts";
+
+        function ensureUnlocked() {
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+        document.addEventListener('click', ensureUnlocked, { capture: true });
+        document.addEventListener('touchstart', ensureUnlocked, { capture: true });
+        document.addEventListener('keydown', ensureUnlocked, { capture: true });
+
+        window.unlockAudio = ensureUnlocked;
+
+        window.stopCurrentAudio = function () {
+            if (currentSource && isPlaying) {
+                try { currentSource.stop(); } catch (e) { }
+                currentSource = null;
+                isPlaying = false;
+                window.stopTalking();
+                window.hideSubtitle(true);
+            }
+        };
+
+        window.speakText = async function (text, character, language = "日本語", speed = 1.0, subtitleEn = "", subtitleJp = "", emotion = null, onStart = null) {
+            if (!text) return;
+
+            try {
+                ensureUnlocked();
+
+                // Clean text for TTS: strip emojis, kaomoji, and special symbols
+                let ttsCleanText = text
+                    .replace(/[\u{1F600}-\u{1F64F}]/gu, '')  // Emoticons
+                    .replace(/[\u{1F300}-\u{1F5FF}]/gu, '')  // Misc symbols
+                    .replace(/[\u{1F680}-\u{1F6FF}]/gu, '')  // Transport
+                    .replace(/[\u{1F1E0}-\u{1F1FF}]/gu, '')  // Flags
+                    .replace(/[\u{2600}-\u{26FF}]/gu, '')    // Misc symbols
+                    .replace(/[\u{2700}-\u{27BF}]/gu, '')    // Dingbats
+                    .replace(/[\u{FE00}-\u{FE0F}]/gu, '')    // Variation selectors
+                    .replace(/[\u{1F900}-\u{1F9FF}]/gu, '')  // Supplemental
+                    .replace(/[\u{200D}]/gu, '')              // Zero width joiner
+                    .replace(/[\u{20E3}]/gu, '')              // Combining enclosing keycap
+                    .replace(/[\u{FE0F}]/gu, '')              // Variation selector
+                    .replace(/[\u2764\u2763\u2661\u2665\u2666\u2660\u2663]/g, '') // Hearts & suits
+                    .replace(/[()[\]{}<>\u2227\u2228\u25E1\u2267\u2266\u2260\u00B0\u0E51\u0361\u035C\u0CA0\uFF89\u30CE\u30C4\u2313\u256F\u25A1\u25A0\uFEFF]/g, '') // Kaomoji parts
+                    .replace(/[~\u266A\u266B\u2606\u2605\u2728\u2764\u2661\u00A7\u203B\u25CF\u25CB\u25B2\u25BC\u25C6\u25C7\u2190\u2191\u2192\u2193\u2194\u2195\u21D0\u21D1\u21D2\u21D3\u2022\u2023]/g, '') // Common symbols
+                    .replace(/\s{2,}/g, ' ')                  // Collapse multiple spaces
+                    .trim();
+
+                if (!ttsCleanText) ttsCleanText = 'hmm';
+
+                // Determine language code and voice based on the language parameter
+                let languageCode = 'ja-JP';
+                let voiceName = 'ja-JP-Neural2-B';
+                if (language === 'English' || language === 'en') {
+                    languageCode = 'en-US';
+                    voiceName = 'en-US-Neural2-F'; // Female English voice
+                }
+
+                const _ttsToken = await window.getToken();
+
+                const res = await fetch(TTS_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(_ttsToken ? { 'Authorization': `Bearer ${_ttsToken}` } : {})
+                    },
+                    body: JSON.stringify({
+                        text: ttsCleanText,
+                        languageCode: languageCode,
+                        voiceName: voiceName,
+                        speakingRate: speed
+                    })
+                });
+
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}));
+                    throw new Error(errData.error || `TTS request failed: ${res.status}`);
+                }
+
+                const data = await res.json();
+
+                if (!data.audioContent) {
+                    throw new Error('No audio content returned from TTS');
+                }
+
+                // Decode the base64 MP3 audio
+                const binaryString = atob(data.audioContent);
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                }
+                const audioBuffer = await audioCtx.decodeAudioData(bytes.buffer);
+
+                await new Promise((resolve, reject) => {
+                    // Stop any currently playing audio
+                    window.stopCurrentAudio();
+
+                    const source = audioCtx.createBufferSource();
+                    source.buffer = audioBuffer;
+                    source.connect(audioCtx.destination);
+                    currentSource = source;
+                    isPlaying = true;
+
+                    // Start talking animation + emotions + subtitles immediately
+                    window.startTalking();
+                    if (emotion) setEmotion(emotion);
+                    if (subtitleEn || subtitleJp) window.showSubtitle(subtitleEn, subtitleJp, true);
+                    if (onStart) onStart();
+
+                    source.onended = () => {
+                        isPlaying = false;
+                        currentSource = null;
+                        window.stopTalking();
+                        setTimeout(() => window.hideSubtitle(true), 2000);
+                        resolve();
+                    };
+
+                    if (navigator.vibrate) navigator.vibrate(50);
+                    source.start(0);
+                });
+
+            } catch (err) {
+                console.error("Google TTS failed:", err);
+                isPlaying = false;
+                currentSource = null;
+                window.stopTalking();
+                window.hideSubtitle(true);
+            }
+        };
+
+        window.speakJP = (text, speed = 1.0) => window.speakText(text, undefined, "日本語", speed);
+        window.speakEN = (text, speed = 0.6) => window.speakText(text, undefined, "English", speed);
+    </script>
+</body>
+
+</html>
