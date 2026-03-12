@@ -3,9 +3,14 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Hiyori Live2D</title>
     <style>
+        :root {
+            --bubble-user: rgba(102, 126, 234, 0.85);
+            --bubble-hiyori: rgba(30, 30, 50, 0.78);
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -17,7 +22,7 @@
             width: 100%;
             height: 100%;
             overflow: hidden;
-            background: #000 url('https://raw.githubusercontent.com/Okabe-Rintaro-0001/hiyori/refs/heads/main/webler_basement_bg.png') no-repeat center center;
+            background: #000 url('https://raw.githubusercontent.com/Okabe-Rintaro-0001/hiyori/refs/heads/main/loving.png') no-repeat center center;
             background-size: cover;
             font-family: 'Segoe UI', sans-serif;
             position: relative;
@@ -35,20 +40,71 @@
         }
 
         #canvas-container {
-            position: fixed;
+            position: fixed !important;
             top: 0;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 100vw;
-            max-width: 480px;
-            height: 100vh;
-            z-index: 1;
+            left: 0;
+            z-index: 75;
+            overflow: hidden;
+            touch-action: none;
+            pointer-events: none;
+            opacity: 1;
+            transition: opacity 0.4s ease;
+        }
+
+        @media (max-width: 1024px) {
+            #canvas-container.scrolling {
+                opacity: 0.3;
+            }
+        }
+
+        #canvas-container.speaking {
+            opacity: 1;
         }
 
         canvas {
             display: block;
             width: 100%;
             height: 100%;
+            pointer-events: none;
+        }
+
+        #mode-selector {
+            position: fixed;
+            bottom: 110px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 6px;
+            z-index: 310;
+            flex-wrap: wrap;
+            justify-content: center;
+            width: min(90%, 500px);
+        }
+
+        .mode-btn {
+            padding: 5px 13px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 20px;
+            background: rgba(0, 0, 0, 0.45);
+            backdrop-filter: blur(10px);
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .mode-btn:hover {
+            background: rgba(102, 126, 234, 0.4);
+            color: #fff;
+            border-color: rgba(102, 126, 234, 0.5);
+        }
+
+        .mode-btn.active {
+            background: rgba(102, 126, 234, 0.65);
+            color: #fff;
+            border-color: rgba(102, 126, 234, 0.8);
+            font-weight: 600;
         }
 
         #chat-bar {
@@ -58,7 +114,7 @@
             transform: translateX(-50%);
             display: flex;
             gap: 8px;
-            z-index: 100;
+            z-index: 300;
             width: min(90%, 500px);
             align-items: flex-end;
         }
@@ -143,15 +199,14 @@
             max-width: none;
             transform: none;
             text-align: center;
-            z-index: 90;
-            /* behind chat bar */
+            z-index: 400;
+            /* on top of everything */
             pointer-events: none;
             opacity: 0;
             transition: opacity 0.4s;
             background: linear-gradient(to top, rgba(0, 0, 0, 0.95), rgba(0, 0, 0, 0.7) 70%, transparent);
-            padding: 40px 24px 80px;
-            /* 80px bottom padding to clear chat bar */
-            backdrop-filter: blur(2px);
+            padding: 40px 24px 150px;
+            /* 150px bottom padding to clear mode selector */
         }
 
         #subtitle.visible {
@@ -454,7 +509,7 @@
             transform: translateX(-50%);
             width: min(90%, 480px);
             top: 65px;
-            bottom: 155px;
+            bottom: 195px;
             z-index: 60;
             overflow-y: auto;
             display: flex;
@@ -463,8 +518,8 @@
             padding: 8px 12px;
             scrollbar-width: none;
             -ms-overflow-style: none;
-            pointer-events: none;
-            /* enabled by JS once messages exist */
+            pointer-events: auto;
+            touch-action: pan-y;
         }
 
         #chat-history-container::-webkit-scrollbar {
@@ -481,18 +536,19 @@
             backdrop-filter: blur(6px);
             -webkit-backdrop-filter: blur(6px);
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+            pointer-events: auto;
         }
 
         .chat-bubble.user {
             align-self: flex-end;
-            background: rgba(102, 126, 234, 0.85);
+            background: var(--bubble-user);
             color: #fff;
             border-bottom-right-radius: 4px;
         }
 
         .chat-bubble.hiyori {
             align-self: flex-start;
-            background: rgba(30, 30, 50, 0.78);
+            background: var(--bubble-hiyori);
             color: #fff;
             border-bottom-left-radius: 4px;
             text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
@@ -511,35 +567,10 @@
             flex-shrink: 0;
         }
 
-        #bg-btn {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            z-index: 1500;
-            background: rgba(255, 255, 255, 0.15);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            color: white;
-            width: 40px;
-            height: 40px;
-            border-radius: 12px;
-            font-size: 16px;
-            cursor: pointer;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.2s;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-        }
-
-        #bg-btn:hover {
-            background: rgba(255, 255, 255, 0.25);
-            transform: scale(1.1);
-        }
 
         #open-browser-btn {
             position: fixed;
-            top: 72px;
+            top: 40px;
             right: 20px;
             z-index: 200;
             width: 36px;
@@ -561,6 +592,14 @@
         #open-browser-btn:hover {
             background: rgba(255, 255, 255, 0.25);
             transform: scale(1.1);
+        }
+
+        /* Prevent iOS rubber-band scroll from moving the page under the canvas */
+        body {
+            overflow: hidden;
+            position: fixed;
+            width: 100%;
+            height: 100%;
         }
     </style>
 </head>
@@ -623,6 +662,15 @@
 
             <button id="start-btn" onclick="handleAuth()">Start Chatting</button>
             <p id="auth-error" style="color: #ff4d4d; margin-top: 15px; font-size: 12px; display: none;"></p>
+            <div
+                style="margin-top: 25px; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 11px; color: rgba(0,0,0,0.3); user-select: none; pointer-events: none; text-transform: uppercase; letter-spacing: 0.5px;">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+                End-to-end encrypted
+            </div>
         </div>
     </div>
 
@@ -649,23 +697,6 @@
         <div id="subtitle-en"></div>
     </div>
 
-    <div
-        style="position: fixed; bottom: 72px; left: 50%; transform: translateX(-50%); z-index: 100; display: flex; align-items: center; gap: 5px; font-size: 13px; color: rgba(0,0,0,0.75); white-space: nowrap; pointer-events: none; user-select: none;">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-            stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="11" width="18" height="11" rx="2" />
-            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-        </svg>
-        End-to-end encrypted
-    </div>
-    <button id="bg-btn" onclick="cycleBg()" title="Change background">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-            stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-            <circle cx="8.5" cy="8.5" r="1.5" />
-            <polyline points="21 15 16 10 5 21" />
-        </svg>
-    </button>
     <a id="open-browser-btn" href="https://okabe-rintaro-0001.github.io/hiyori/" target="_blank" rel="noopener"
         title="Open in browser">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
@@ -675,6 +706,7 @@
             <line x1="10" y1="14" x2="21" y2="3" />
         </svg>
     </a>
+    <div id="mode-selector"></div>
     <div id="chat-bar">
         <textarea id="chat-input" placeholder="Talk to Hiyori..." autocomplete="off" maxlength="500"
             rows="1"></textarea>
@@ -686,13 +718,16 @@
     <script src="https://cdn.jsdelivr.net/npm/pixi-live2d-display@0.4.0/dist/cubism4.min.js"></script>
 
     <script>
-        // ─── Auth functions defined immediately — before window.onload ───
-        // so they are always available to onclick handlers regardless of CDN load failures
-
         const BASE_URL = "https://project-qibmt.vercel.app";
         const AUTH_URL = `${BASE_URL}/auth`;
 
-        // Memory fallback for environments where localStorage is blocked (e.g. SoloLearn iframe)
+        let chatHistory = [];
+        const MAX_HISTORY = 50;
+
+        function trimHistory() {
+            if (chatHistory.length > MAX_HISTORY) chatHistory = chatHistory.slice(-MAX_HISTORY);
+        }
+
         const _mem = {};
         function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { _mem[k] = v; } }
         function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return _mem[k] ?? null; } }
@@ -788,7 +823,6 @@
 
                 saveSession(data.idToken, data.refreshToken, data.displayName);
                 document.getElementById('logout-btn').style.display = 'flex';
-                document.getElementById('bg-btn').style.display = 'flex';
                 document.getElementById('welcome-screen').classList.add('hidden');
                 if (typeof _startExperience === 'function') _startExperience();
             } catch (error) {
@@ -807,9 +841,7 @@
         window.handleLogout = function () {
             clearSession();
             if (window.self !== window.top) {
-                // Iframe environment (SoloLearn) — reload blanks the page, soft-reset instead
                 document.getElementById('logout-btn').style.display = 'none';
-                document.getElementById('bg-btn').style.display = 'none';
                 document.getElementById('welcome-screen').classList.remove('hidden');
                 document.getElementById('email-input').value = '';
                 document.getElementById('password-input').value = '';
@@ -847,11 +879,153 @@
             setTimeout(() => card.style.transform = 'translateX(0)', 200);
         }
 
+        // ─── Mode Selector ───
+        const FALLBACK_MODES = [
+            { id: 'loving', name: 'Loving & Caring', isDefault: true },
+            { id: 'unhinged', name: 'Unhinged', isDefault: false },
+            { id: 'obedient', name: 'Obedient Servant', isDefault: false }
+        ];
+
+        async function loadModeSelector() {
+            try {
+                const res = await fetch(`${BASE_URL}/personalities`);
+                if (!res.ok) { renderModeSelector(FALLBACK_MODES); return; }
+                const modes = await res.json();
+                renderModeSelector(modes && modes.length ? modes : FALLBACK_MODES);
+            } catch (e) {
+                console.warn('[Modes] Failed to load personalities, using defaults:', e.message);
+                renderModeSelector(FALLBACK_MODES);
+            }
+        }
+
+        const PERSONALITY_THEMES = {
+            'loving': {
+                bg: 'https://raw.githubusercontent.com/Okabe-Rintaro-0001/hiyori/refs/heads/main/loving.png',
+                userBubble: 'rgba(102, 126, 234, 0.85)',
+                hiyoriBubble: 'rgba(30, 30, 50, 0.78)'
+            },
+            'unhinged': {
+                bg: 'https://raw.githubusercontent.com/Okabe-Rintaro-0001/hiyori/refs/heads/main/download.png',
+                userBubble: 'rgba(180, 40, 40, 0.85)',
+                hiyoriBubble: 'rgba(60, 20, 20, 0.85)'
+            },
+            'obidient': {
+                bg: 'https://raw.githubusercontent.com/Okabe-Rintaro-0001/hiyori/refs/heads/main/nano_banana_removed.png',
+                userBubble: 'rgba(80, 80, 100, 0.85)',
+                hiyoriBubble: 'rgba(40, 40, 50, 0.85)'
+            }
+        };
+
+        function updateBackground(modeId) {
+            let theme = PERSONALITY_THEMES[modeId];
+
+            // If no exact match by ID, try fuzzy matching by ID or Name (from the DOM buttons)
+            if (!theme && modeId) {
+                const idLower = modeId.toLowerCase();
+                for (const [key, data] of Object.entries(PERSONALITY_THEMES)) {
+                    if (idLower.includes(key) || key.includes(idLower)) {
+                        theme = data;
+                        break;
+                    }
+                }
+            }
+
+            if (theme) {
+                document.body.style.backgroundImage = `url('${theme.bg}')`;
+                document.body.style.backgroundSize = 'cover';
+                document.body.style.backgroundPosition = 'center center';
+                document.body.style.backgroundRepeat = 'no-repeat';
+                document.documentElement.style.setProperty('--bubble-user', theme.userBubble);
+                document.documentElement.style.setProperty('--bubble-hiyori', theme.hiyoriBubble);
+            } else {
+                // Fallback to default if no specific personality bg found
+                document.body.style.backgroundImage = `url('https://raw.githubusercontent.com/Okabe-Rintaro-0001/hiyori/refs/heads/main/bg.png')`;
+                document.body.style.backgroundSize = 'cover';
+                document.body.style.backgroundPosition = 'center center';
+                document.body.style.backgroundRepeat = 'no-repeat';
+                document.documentElement.style.setProperty('--bubble-user', PERSONALITY_THEMES['loving'].userBubble);
+                document.documentElement.style.setProperty('--bubble-hiyori', PERSONALITY_THEMES['loving'].hiyoriBubble);
+            }
+        }
+
+        function renderModeSelector(modes) {
+            const container = document.getElementById('mode-selector');
+            if (!modes || modes.length <= 1) { container.style.display = 'none'; return; }
+            container.style.display = 'flex';
+            container.innerHTML = '';
+
+            const activeMode = lsGet('hiyori_mode') || modes.find(m => m.isDefault)?.id || modes[0].id;
+
+            let lastModeId = activeMode;
+            modes.forEach(m => {
+                const btn = document.createElement('button');
+                btn.className = 'mode-btn' + (m.id === activeMode ? ' active' : '');
+                btn.textContent = m.name;
+                btn.onclick = () => {
+                    if (m.id === lastModeId) return;
+
+                    // Inject transition marker for the LLM
+                    chatHistory.push({
+                        role: "user",
+                        content: `[SYSTEM: Mood Shift. User has changed your personality to "${m.name}". Adjust your tone, behavior, and vocabulary immediately to match your new personality instructions. Ignore the previous personality's style from this point forward.]`
+                    });
+                    if (chatHistory.length > MAX_HISTORY) chatHistory = chatHistory.slice(-MAX_HISTORY);
+
+                    lastModeId = m.id;
+                    lsSet('hiyori_mode', m.id);
+                    container.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    updateBackground(m.id);
+                    showToast(`Personality shifted to ${m.name}`);
+                };
+                container.appendChild(btn);
+            });
+
+            // Set initial background based on active mode
+            updateBackground(activeMode);
+        }
+
+        function refreshModeSelector() {
+            loadModeSelector();
+        }
+
+        function showToast(msg) {
+            let toast = document.getElementById('hiyori-toast');
+            if (!toast) {
+                toast = document.createElement('div');
+                toast.id = 'hiyori-toast';
+                toast.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.75);color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;z-index:9999;backdrop-filter:blur(10px);transition:opacity 0.3s;pointer-events:none;';
+                document.body.appendChild(toast);
+            }
+            toast.textContent = msg;
+            toast.style.opacity = '1';
+            clearTimeout(toast._timeout);
+            toast._timeout = setTimeout(() => { toast.style.opacity = '0'; }, 3000);
+        }
+
         window.onload = () => {
 
-            const {
-                Live2DModel
-            } = PIXI.live2d;
+            // ═══════════════════════════════════════════════════
+            // STABLE DIMENSIONS — captured FIRST, before anything
+            // else runs. These never change due to keyboard events.
+            // ═══════════════════════════════════════════════════
+            // Use screen.width as anchor so browser zoom / WebView quirks
+            // (e.g. Sololearn's keyboard) can't shrink the reported width.
+            let STABLE_W = Math.min(screen.width || window.innerWidth, 480);
+            let STABLE_H = window.innerHeight;
+            const INITIAL_STABLE_W = STABLE_W; // never let width fall below this
+
+            // Lock canvas container immediately so keyboard can't move it
+            const canvasContainer = document.getElementById('canvas-container');
+            canvasContainer.style.position = 'fixed';
+            canvasContainer.style.top = '0';
+            canvasContainer.style.left = '0';
+            canvasContainer.style.width = STABLE_W + 'px';
+            canvasContainer.style.height = STABLE_H + 'px';
+            canvasContainer.style.overflow = 'hidden';
+            canvasContainer.style.touchAction = 'none';
+
+            const { Live2DModel } = PIXI.live2d;
 
             const PROXY_URL = `${BASE_URL}/chat`;
             const HISTORY_URL = `${BASE_URL}/history`;
@@ -859,19 +1033,33 @@
             let model = null;
             let app = null;
             let userName = lsGet('hiyori_user') || "Guest";
-            let chatHistory = [];
             let isTalking = false;
             let talkTickerFn = null;
 
-            let oldestTimestamp = null;   // seconds — cursor for lazy loading older msgs
+            let oldestTimestamp = null;
             let isLoadingOlderHistory = false;
             let hasMoreHistory = false;
             let historyHasMore = false;
             let isLoadingHistory = false;
 
+            function fitModel() {
+                if (!model || !app) return;
+                const scale = Math.min(STABLE_W / model.width, STABLE_H / model.height) * 1.7;
+                model.scale.set(scale);
+                model.anchor.set(0.5, 0.5);
+                model.x = STABLE_W / 2;
+                model.y = (STABLE_H / 2) + (STABLE_H * 0.35);
+
+                // Force canvas container back to correct position every time
+                canvasContainer.style.position = 'fixed';
+                canvasContainer.style.top = '0px';
+                canvasContainer.style.left = '0px';
+                canvasContainer.style.width = STABLE_W + 'px';
+                canvasContainer.style.height = STABLE_H + 'px';
+            }
+
             function appendMessage(role, text) {
                 const container = document.getElementById('chat-history-container');
-                container.style.pointerEvents = 'auto'; // enable scrolling once content exists
                 const bubble = document.createElement('div');
                 bubble.classList.add('chat-bubble', role === 'user' ? 'user' : 'hiyori');
                 bubble.textContent = text;
@@ -884,7 +1072,6 @@
                 const spinner = document.getElementById('history-load-spinner');
                 const prevScrollHeight = container.scrollHeight;
                 const prevScrollTop = container.scrollTop;
-
                 const fragment = document.createDocumentFragment();
                 msgs.forEach(msg => {
                     if (msg.input) {
@@ -900,11 +1087,7 @@
                         fragment.appendChild(b);
                     }
                 });
-
-                // Insert right after the spinner so new content appears at the top
                 container.insertBefore(fragment, spinner.nextSibling);
-
-                // Restore scroll position so the view doesn't jump
                 container.scrollTop = prevScrollTop + (container.scrollHeight - prevScrollHeight);
             }
 
@@ -941,17 +1124,17 @@
                 const token = await getToken();
                 if (token) {
                     document.getElementById('logout-btn').style.display = 'flex';
-                    document.getElementById('bg-btn').style.display = 'flex';
                     startExperience();
                 }
             })();
 
+            // ═══════════════════════════════════════════════════
+            // init — uses STABLE_W/H for PIXI app creation
+            // ═══════════════════════════════════════════════════
             async function init() {
-
-                const containerW = Math.min(window.innerWidth, 480);
                 app = new PIXI.Application({
-                    width: containerW,
-                    height: window.innerHeight,
+                    width: STABLE_W,
+                    height: STABLE_H,
                     backgroundAlpha: 0,
                     antialias: true,
                     resolution: window.devicePixelRatio || 1,
@@ -961,29 +1144,23 @@
                 document.getElementById('canvas-container').appendChild(app.view);
 
                 model = await Live2DModel.from(
-                    'https://raw.githubusercontent.com/PhyG0/hiyori/main/runtime/hiyori_free_t08.model3.json', {
-                    autoInteract: false
-                }
+                    'https://raw.githubusercontent.com/PhyG0/hiyori/main/runtime/hiyori_free_t08.model3.json',
+                    { autoInteract: false }
                 );
 
                 if (model.internalModel.eyeBlink) {
                     model.internalModel.eyeBlink = null;
                 }
 
-                fitModel();
                 app.stage.addChild(model);
+                fitModel();
 
                 document.getElementById('loading').classList.add('hidden');
-
-                // All animation is driven by the lively ticker — no motion clips needed
                 startLivelyTicker();
             }
 
-            // Removed redundant listener as it is already in the HTML onclick attribute
-
             async function startExperience() {
                 document.getElementById('welcome-screen').classList.add('hidden');
-
                 window.unlockAudio();
 
                 const spinner = document.getElementById('history-init-loader');
@@ -1015,10 +1192,11 @@
                     spinner.style.display = 'none';
                 }
 
-                // Focus input after login
-                setTimeout(() => {
-                    document.getElementById('chat-input').focus();
-                }, 500);
+                // Load personality modes
+                loadModeSelector();
+
+                // Simple focus — no resize needed here
+                setTimeout(() => document.getElementById('chat-input').focus(), 500);
             }
 
             const EMOTION_MAP = {
@@ -1031,19 +1209,15 @@
                 neutral: { eyeSmile: 0.0, browForm: 0.0, mouthForm: 0.0, cheek: 0.0, emoji: null },
             };
 
-            // Current & target emotion parameter values for smooth lerping
             let emotionCurrent = { eyeSmile: 0, browForm: 0, mouthForm: 0, cheek: 0 };
             let emotionTarget = { eyeSmile: 0, browForm: 0, mouthForm: 0, cheek: 0 };
-            const LERP_SPEED = 0.06; // per frame (smooth blend — lower = smoother)
+            const LERP_SPEED = 0.06;
 
-            // Smooth mouth open value (used for talking)
             let mouthOpenCurrent = 0;
             let mouthOpenTarget = 0;
             const MOUTH_LERP_SPEED = 0.15;
 
-            function lerp(a, b, t) {
-                return a + (b - a) * t;
-            }
+            function lerp(a, b, t) { return a + (b - a) * t; }
 
             window.setEmotion = function (emotionName) {
                 const em = EMOTION_MAP[emotionName] || EMOTION_MAP.neutral;
@@ -1051,8 +1225,6 @@
                 emotionTarget.browForm = em.browForm;
                 emotionTarget.mouthForm = em.mouthForm;
                 emotionTarget.cheek = em.cheek;
-
-                // Show / hide emoji bubble
                 const bubble = document.getElementById('emotion-bubble');
                 const emojiEl = document.getElementById('emotion-emoji');
                 if (em.emoji) {
@@ -1066,34 +1238,26 @@
             window.clearEmotion = function () {
                 emotionTarget = { eyeSmile: 0, browForm: 0, mouthForm: 0, cheek: 0 };
                 document.getElementById('emotion-bubble').classList.remove('visible');
-            }
+            };
 
             function startLivelyTicker() {
                 let blinkTimer = 0;
                 let blinkState = 0;
-
-                // Smooth head sway targets (for gradual drift changes)
-                let headSwayPhase = Math.random() * Math.PI * 2;
-
-                // Idle emotion trigger
                 const IDLE_EMOTIONS = ['happy', 'playful', 'shy', 'surprised'];
                 let idleEmotionTimer = 15 + Math.random() * 20;
                 let idleEmotionActive = false;
 
                 app.ticker.add((delta) => {
                     if (!model) return;
-
-                    const dt = delta / 60; // seconds
+                    const dt = delta / 60;
                     const t = Date.now() / 1000;
                     const core = model.internalModel.coreModel;
 
-                    // Smooth-lerp emotion parameters each frame
                     emotionCurrent.eyeSmile = lerp(emotionCurrent.eyeSmile, emotionTarget.eyeSmile, LERP_SPEED);
                     emotionCurrent.browForm = lerp(emotionCurrent.browForm, emotionTarget.browForm, LERP_SPEED);
                     emotionCurrent.mouthForm = lerp(emotionCurrent.mouthForm, emotionTarget.mouthForm, LERP_SPEED);
                     emotionCurrent.cheek = lerp(emotionCurrent.cheek, emotionTarget.cheek, LERP_SPEED);
 
-                    // Apply emotion to face
                     core.setParameterValueById('ParamEyeLSmile', emotionCurrent.eyeSmile);
                     core.setParameterValueById('ParamEyeRSmile', emotionCurrent.eyeSmile);
                     core.setParameterValueById('ParamBrowLForm', emotionCurrent.browForm);
@@ -1101,7 +1265,6 @@
                     core.setParameterValueById('ParamMouthForm', emotionCurrent.mouthForm);
                     core.setParameterValueById('ParamCheek', emotionCurrent.cheek);
 
-                    // Smooth organic head sway (multiple layered sine waves)
                     const headX = Math.sin(t * 0.35) * 6 + Math.sin(t * 0.13) * 3 + Math.sin(t * 0.07) * 2;
                     const headY = Math.sin(t * 0.28) * 4 + Math.sin(t * 0.17) * 2;
                     const headZ = Math.sin(t * 0.2) * 4 + Math.sin(t * 0.09) * 2;
@@ -1109,17 +1272,13 @@
                     core.setParameterValueById('ParamAngleX', headX);
                     core.setParameterValueById('ParamAngleY', headY);
                     core.setParameterValueById('ParamAngleZ', headZ);
-
                     core.setParameterValueById('ParamBodyAngleX', headX * 0.2);
                     core.setParameterValueById('ParamBodyAngleZ', headZ * 0.12);
-
                     core.setParameterValueById('ParamBreath', (Math.sin(t * 0.7) + 1) / 2);
 
-                    // Smooth mouth open lerp (talking or idle)
                     mouthOpenCurrent = lerp(mouthOpenCurrent, mouthOpenTarget, MOUTH_LERP_SPEED);
                     core.setParameterValueById('ParamMouthOpenY', mouthOpenCurrent);
 
-                    // Idle emotion triggers (random bursts of expression)
                     if (!isTalking && !touchCooldown && !idleEmotionActive) {
                         idleEmotionTimer -= dt;
                         if (idleEmotionTimer <= 0) {
@@ -1134,21 +1293,16 @@
                         }
                     }
 
-                    // Blinking — only when NOT mid-blink-motion-conflict
                     blinkTimer -= dt;
-
                     if (blinkState === 0 && blinkTimer <= 0) {
                         blinkState = 1;
-                        blinkTimer = 0.1; // closing duration
+                        blinkTimer = 0.1;
                     } else if (blinkState === 1) {
                         const progress = 1 - (blinkTimer / 0.1);
                         const v = Math.max(0, 1 - progress);
                         core.setParameterValueById('ParamEyeLOpen', v);
                         core.setParameterValueById('ParamEyeROpen', v);
-                        if (blinkTimer <= 0) {
-                            blinkState = 2;
-                            blinkTimer = 0.12; // opening duration
-                        }
+                        if (blinkTimer <= 0) { blinkState = 2; blinkTimer = 0.12; }
                     } else if (blinkState === 2) {
                         const progress = 1 - (blinkTimer / 0.12);
                         const v = Math.min(1, progress);
@@ -1167,115 +1321,51 @@
             window.startTalking = function () {
                 if (!model || isTalking) return;
                 isTalking = true;
-
-                // Use a ticker to smoothly animate mouth based on speech patterns
-                // mouthOpenTarget is updated each frame; the main ticker lerps it smoothly
+                document.getElementById('canvas-container').classList.add('speaking');
                 talkTickerFn = () => {
                     if (!model || !isTalking) return;
                     const t = Date.now() * 0.001;
-                    // Layered sine waves for organic mouth movement
                     const wave1 = Math.abs(Math.sin(t * 9.5)) * 0.45;
                     const wave2 = Math.abs(Math.sin(t * 6.3)) * 0.25;
                     const wave3 = Math.abs(Math.sin(t * 3.1)) * 0.15;
                     const burst = Math.random() > 0.8 ? Math.random() * 0.2 : 0;
                     mouthOpenTarget = Math.min(1, wave1 + wave2 + wave3 + burst + 0.1);
                 };
-
                 app.ticker.add(talkTickerFn);
             };
 
             window.stopTalking = function () {
                 if (!isTalking) return;
                 isTalking = false;
-
-                if (talkTickerFn) {
-                    app.ticker.remove(talkTickerFn);
-                    talkTickerFn = null;
-                }
-
-                // Smoothly close mouth (lerped in the main ticker)
+                if (talkTickerFn) { app.ticker.remove(talkTickerFn); talkTickerFn = null; }
                 mouthOpenTarget = 0;
-
-                // Smoothly fade emotion back to neutral
+                document.getElementById('canvas-container').classList.remove('speaking');
                 window.clearEmotion();
             };
 
-            function fitModel() {
-                if (!model || !app) return;
 
-                const w = app.screen.width;
-                const h = app.screen.height;
-
-                // To ensure knees are visible but still zoomed in decently,
-                // we scale her up a bit more.
-                const scaleY = h / model.height;
-                const scaleX = w / model.width;
-
-                // Increase the multiplier to zoom her in up to the knees
-                const scale = Math.min(scaleX, scaleY) * 1.7;
-
-                model.scale.set(scale);
-                model.anchor.set(0.5, 0.5);
-
-                // Center horizontally
-                model.x = w / 2;
-
-                // Shift her down so her knees hit the bottom of the screen
-                model.y = (h / 2) + (h * 0.35);
-            }
-
-            function trimHistory() {
-                if (chatHistory.length > MAX_HISTORY) {
-                    chatHistory = chatHistory.slice(-MAX_HISTORY);
-                }
-            }
-
-            const MAX_HISTORY = 50;
 
             async function askLLM(userMessage) {
                 if (userMessage.length < 2) return;
-
-                chatHistory.push({
-                    role: "user",
-                    content: userMessage
-                });
+                chatHistory.push({ role: "user", content: userMessage });
                 trimHistory();
 
-                const body = {
-                    messages: chatHistory,
-                    user: userName // Send the username to the backend
-                };
-
                 const token = await getToken();
-
                 const res = await fetch(PROXY_URL, {
                     method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Authorization": `Bearer ${token}`
-                    },
-                    body: JSON.stringify(body)
+                    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+                    body: JSON.stringify({ messages: chatHistory, user: userName, mode: lsGet('hiyori_mode') || undefined })
                 });
 
-                if (!res.ok) {
-                    chatHistory.pop();
-                    throw new Error(`Groq API Error: ${res.status} ${res.statusText}`);
-                }
+                if (!res.ok) { chatHistory.pop(); throw new Error(`Groq API Error: ${res.status} ${res.statusText}`); }
 
                 const data = await res.json();
                 let raw = data.choices?.[0]?.message?.content || "";
-                // console.log("LLM raw:", raw);
-
-                // Strip thinking tags, code fences, etc.
                 raw = raw.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
                 const jsonMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/) || raw.match(/(\{[\s\S]*\})/);
                 if (jsonMatch) raw = jsonMatch[1].trim();
 
-                let reply = {
-                    reply_en: "",
-                    emotion: "neutral"
-                };
-
+                let reply = { reply_en: "", emotion: "neutral" };
                 try {
                     const parsed = JSON.parse(raw);
                     reply.reply_en = parsed.reply_en || parsed.reply || "";
@@ -1284,139 +1374,65 @@
                     reply.reply_en = raw.replace(/[{}\"`]/g, "").trim();
                 }
 
-                if (reply.reply_en) {
-                    chatHistory.push({
-                        role: "assistant",
-                        content: raw
-                    });
-                    trimHistory();
-                } else {
-                    chatHistory.pop();
-                    throw new Error("Empty response from LLM");
+                if (reply.reply_en) { chatHistory.push({ role: "assistant", content: raw }); trimHistory(); }
+                else { chatHistory.pop(); throw new Error("Empty response from LLM"); }
+
+                // If the mode we were using was deleted, backend fell back to default — sync UI
+                if (data.personality_fallback) {
+                    lsDel('hiyori_mode');
+                    refreshModeSelector();
+                    showToast('Mode was removed by admin. Switched to default.');
                 }
 
                 return reply;
             }
 
-            // Subtitle priority: audio/TTS > touch reactions
             let subtitleLocked = false;
 
             window.showSubtitle = function (en, jp, priority = false) {
-                // If subtitle is locked by audio and this is not a priority call, skip
                 if (subtitleLocked && !priority) return;
-
-                const el = document.getElementById('subtitle');
                 document.getElementById('subtitle-en').textContent = en;
-                el.classList.add('visible');
-
+                document.getElementById('subtitle').classList.add('visible');
                 if (priority) subtitleLocked = true;
             };
 
             window.hideSubtitle = function (unlock = false) {
-                // Don't let touch timeouts hide priority (audio) subtitles
                 if (subtitleLocked && !unlock) return;
                 document.getElementById('subtitle').classList.remove('visible');
                 if (unlock) subtitleLocked = false;
             };
 
-            // ─── Touch-response system ───
-            // Maps click/tap position to body zones and triggers reactions
             const TOUCH_REACTIONS = {
-                head: {
-                    emotion: 'happy',
-                    responses: [
-                        { en: "Hehe~ that tickles!", jp: "えへへ〜くすぐったい！" },
-                        { en: "Pat pat~ I like that!", jp: "なでなで〜好き！" },
-                        { en: "Mmm~ head pats are the best~", jp: "んー〜頭なでなでが一番好き〜" },
-                    ]
-                },
-                face: {
-                    emotion: 'shy',
-                    responses: [
-                        { en: "W-what are you doing?!", jp: "な、何してるの？！" },
-                        { en: "My face... don't stare so close!", jp: "顔…そんな近くで見ないで！" },
-                        { en: "Ehh~ you're making me blush!", jp: "えぇ〜赤くなっちゃう！" },
-                    ]
-                },
-                chest: {
-                    emotion: 'angry',
-                    responses: [
-                        { en: "H-HEY! Where do you think you're touching?!", jp: "ちょ、ちょっと！どこ触ってるの？！" },
-                        { en: "Don't touch there, pervert!!", jp: "そこ触らないで、変態！！" },
-                        { en: "I-I'll seriously get mad!!", jp: "ほ、本気で怒るよ！！" },
-                    ]
-                },
-                skirt: {
-                    emotion: 'shy',
-                    responses: [
-                        { en: "D-don't touch my skirt!", jp: "ス、スカート触らないで！" },
-                        { en: "Hey!! That's off limits!!", jp: "ちょっと！！そこはダメ！！" },
-                        { en: "W-what are you trying to do?!", jp: "な、何しようとしてるの？！" },
-                    ]
-                },
-                arm: {
-                    emotion: 'surprised',
-                    responses: [
-                        { en: "Hmm? What's up?", jp: "ん？どうしたの？" },
-                        { en: "Oh? You want my attention?", jp: "あら？かまってほしいの？" },
-                        { en: "Poking me, huh~?", jp: "つんつんしてるの〜？" },
-                    ]
-                },
-                body: {
-                    emotion: 'surprised',
-                    responses: [
-                        { en: "Hmm? Don't just poke me randomly!", jp: "ん？適当につつかないで！" },
-                        { en: "What~? Need something?", jp: "なに〜？用があるの？" },
-                        { en: "Hey! That startled me!", jp: "もう！びっくりした！" },
-                    ]
-                }
+                head: { emotion: 'happy', responses: [{ en: "Hehe~ that tickles!", jp: "えへへ〜くすぐったい！" }, { en: "Pat pat~ I like that!", jp: "なでなで〜好き！" }, { en: "Mmm~ head pats are the best~", jp: "んー〜頭なでなでが一番好き〜" }] },
+                face: { emotion: 'shy', responses: [{ en: "W-what are you doing?!", jp: "な、何してるの？！" }, { en: "My face... don't stare so close!", jp: "顔…そんな近くで見ないで！" }, { en: "Ehh~ you're making me blush!", jp: "えぇ〜赤くなっちゃう！" }] },
+                chest: { emotion: 'angry', responses: [{ en: "H-HEY! Where do you think you're touching?!", jp: "ちょ、ちょっと！どこ触ってるの？！" }, { en: "Don't touch there, pervert!!", jp: "そこ触らないで、変態！！" }, { en: "I-I'll seriously get mad!!", jp: "ほ、本気で怒るよ！！" }] },
+                skirt: { emotion: 'shy', responses: [{ en: "D-don't touch my skirt!", jp: "ス、スカート触らないで！" }, { en: "Hey!! That's off limits!!", jp: "ちょっと！！そこはダメ！！" }, { en: "W-what are you trying to do?!", jp: "な、何しようとしてるの？！" }] },
+                arm: { emotion: 'surprised', responses: [{ en: "Hmm? What's up?", jp: "ん？どうしたの？" }, { en: "Oh? You want my attention?", jp: "あら？かまってほしいの？" }, { en: "Poking me, huh~?", jp: "つんつんしてるの〜？" }] },
+                body: { emotion: 'surprised', responses: [{ en: "Hmm? Don't just poke me randomly!", jp: "ん？適当につつかないで！" }, { en: "What~? Need something?", jp: "なに〜？用があるの？" }, { en: "Hey! That startled me!", jp: "もう！びっくりした！" }] },
             };
 
             let touchCooldown = false;
 
             function getTouchZone(localX, localY) {
-                // localX, localY are normalized to model space: (0,0) = top-left, (1,1) = bottom-right
-                // Adjusted for the zoomed-out view showing more of the character
-
-                if (localY < 0.18) return 'head';          // top of head
-                if (localY < 0.30) return 'face';           // face area
-                if (localY < 0.42) {
-                    // Chest vs arm — arms are on the sides
-                    if (localX < 0.28 || localX > 0.72) return 'arm';
-                    return 'chest';
-                }
-                if (localY < 0.58) {
-                    if (localX < 0.22 || localX > 0.78) return 'arm';
-                    return 'skirt';
-                }
-                return 'body'; // legs / below
+                if (localY < 0.18) return 'head';
+                if (localY < 0.30) return 'face';
+                if (localY < 0.42) return (localX < 0.28 || localX > 0.72) ? 'arm' : 'chest';
+                if (localY < 0.58) return (localX < 0.22 || localX > 0.78) ? 'arm' : 'skirt';
+                return 'body';
             }
 
             function handleTouch(screenX, screenY) {
                 if (!model || touchCooldown || isTalking || subtitleLocked) return;
-
-                // Convert screen coords to model-local normalized coords
                 const bounds = model.getBounds();
                 const localX = (screenX - bounds.x) / bounds.width;
                 const localY = (screenY - bounds.y) / bounds.height;
-
-                // Check if click is within model bounds
                 if (localX < 0 || localX > 1 || localY < 0 || localY > 1) return;
-
                 const zone = getTouchZone(localX, localY);
                 const reaction = TOUCH_REACTIONS[zone];
                 if (!reaction) return;
-
-                // Pick a random response
                 const resp = reaction.responses[Math.floor(Math.random() * reaction.responses.length)];
-
-                // Set emotion
                 window.setEmotion(reaction.emotion);
-
-                // Show subtitle
                 window.showSubtitle(resp.en, resp.jp);
-
-                // Auto-hide after 2.5s and return to neutral
                 touchCooldown = true;
                 setTimeout(() => {
                     window.hideSubtitle();
@@ -1425,126 +1441,164 @@
                 }, 2500);
             }
 
-            // Listen for clicks/taps on the canvas container
-            document.getElementById('canvas-container').addEventListener('pointerdown', (e) => {
-                // Get position relative to the PIXI canvas
+            window.addEventListener('pointerdown', (e) => {
+                if (!app || !model) return;
+                // Don't trigger petting if clicking UI elements (buttons, inputs)
+                const target = e.target;
+                if (target.tagName === 'BUTTON' || target.tagName === 'TEXTAREA' || target.tagName === 'INPUT' || target.closest('#chat-bar')) return;
+
                 const rect = app.view.getBoundingClientRect();
                 const scaleX = app.screen.width / rect.width;
                 const scaleY = app.screen.height / rect.height;
-                const screenX = (e.clientX - rect.left) * scaleX;
-                const screenY = (e.clientY - rect.top) * scaleY;
-                handleTouch(screenX, screenY);
+                const canvasX = (e.clientX - rect.left) * scaleX;
+                const canvasY = (e.clientY - rect.top) * scaleY;
+                handleTouch(canvasX, canvasY);
             });
 
-            // ─── Chat Overlay Rendering ───
             function renderMessageToOverlay(userText, assistantText, timestamp, atBottom = true) {
                 const container = document.getElementById('chat-history-overlay');
                 const timeStr = new Date(timestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
                 function makeBubble(wrapClass, bodyText, metaText) {
-                    const wrap = document.createElement('div');
-                    wrap.className = wrapClass;
-                    const body = document.createElement('div');
-                    body.className = 'chat-bubble-v2';
-                    body.textContent = bodyText;
-                    const meta = document.createElement('div');
-                    meta.className = 'chat-bubble-meta';
-                    meta.textContent = metaText;
-                    wrap.appendChild(body);
-                    wrap.appendChild(meta);
+                    const wrap = document.createElement('div'); wrap.className = wrapClass;
+                    const body = document.createElement('div'); body.className = 'chat-bubble-v2'; body.textContent = bodyText;
+                    const meta = document.createElement('div'); meta.className = 'chat-bubble-meta'; meta.textContent = metaText;
+                    wrap.appendChild(body); wrap.appendChild(meta);
                     return wrap;
                 }
-
-                // 1. Render User Message if exists
                 if (userText) {
-                    const userWrap = makeBubble('chat-bubble-wrapper user', userText, `${userName} • ${timeStr}`);
-                    if (atBottom) container.appendChild(userWrap);
-                    else container.prepend(userWrap);
+                    const w = makeBubble('chat-bubble-wrapper user', userText, `${userName} • ${timeStr}`);
+                    atBottom ? container.appendChild(w) : container.prepend(w);
                 }
-
-                // 2. Render Assistant Message if exists
                 if (assistantText) {
-                    const aiWrap = makeBubble('chat-bubble-wrapper assistant', assistantText, `Hiyori • ${timeStr}`);
-                    if (atBottom) container.appendChild(aiWrap);
-                    else container.prepend(aiWrap);
+                    const w = makeBubble('chat-bubble-wrapper assistant', assistantText, `Hiyori • ${timeStr}`);
+                    atBottom ? container.appendChild(w) : container.prepend(w);
                 }
-
                 if (atBottom) container.scrollTop = container.scrollHeight;
             }
 
             async function loadMoreHistory() {
                 if (!historyHasMore || isLoadingHistory || !oldestTimestamp) return;
-
                 isLoadingHistory = true;
                 const container = document.getElementById('chat-history-overlay');
                 const oldScrollHeight = container.scrollHeight;
-
-                // Add temporary indicator at top
                 const loadingIndicator = document.createElement('div');
                 loadingIndicator.className = 'history-loading';
                 loadingIndicator.textContent = "Loading older messages...";
                 container.prepend(loadingIndicator);
-
                 try {
+                    const token = await getToken();
                     const res = await fetch(`${HISTORY_URL}?before=${oldestTimestamp}&limit=20`, {
-                        headers: { 'Authorization': `Bearer ${currentToken}` }
+                        headers: { 'Authorization': `Bearer ${token}` }
                     });
                     loadingIndicator.remove();
-
                     if (res.ok) {
                         const data = await res.json();
                         if (data.messages && data.messages.length > 0) {
-                            // Prepend in reverse to maintain temporal order
-                            // (data.messages is oldest first)
-                            const reversed = [...data.messages].reverse();
-                            reversed.forEach(msg => {
+                            [...data.messages].reverse().forEach(msg => {
                                 renderMessageToOverlay(msg.input, msg.output, msg.timestamp, false);
                             });
-
                             oldestTimestamp = data.messages[0].timestamp;
                             historyHasMore = data.hasMore;
-
-                            // Adjust scroll to maintain position
-                            const newScrollHeight = container.scrollHeight;
-                            container.scrollTop = newScrollHeight - oldScrollHeight;
-                        } else {
-                            historyHasMore = false;
-                        }
+                            container.scrollTop = container.scrollHeight - oldScrollHeight;
+                        } else { historyHasMore = false; }
                     }
-                } catch (e) {
-                    console.error("Pagination failed:", e);
-                    loadingIndicator.remove();
-                } finally {
-                    isLoadingHistory = false;
-                }
+                } catch (e) { console.error("Pagination failed:", e); loadingIndicator.remove(); }
+                finally { isLoadingHistory = false; }
             }
 
             window._startExperience = startExperience;
 
-            // ── Background Switcher ──
-            const BACKGROUNDS = [
-                `url('https://raw.githubusercontent.com/Okabe-Rintaro-0001/hiyori/refs/heads/main/webler_basement_bg.png')`,
-                `url('https://raw.githubusercontent.com/Okabe-Rintaro-0001/hiyori/refs/heads/main/bg.png')`
-            ];
-            let bgIndex = 0;
-            window.cycleBg = function () {
-                bgIndex = (bgIndex + 1) % BACKGROUNDS.length;
-                document.body.style.backgroundImage = BACKGROUNDS[bgIndex];
-            };
 
-            init();
+            let _lastStableW = STABLE_W;
+            let _lastH = STABLE_H;
 
-            // Lazy-load older messages when the user scrolls to the top
-            document.getElementById('chat-history-container').addEventListener('scroll', function () {
-                if (this.scrollTop === 0 && !isLoadingOlderHistory && hasMoreHistory) {
-                    loadOlderHistory();
+            function onViewportChange() {
+                if (!app || !model) return;
+
+                // If browser is zoomed (e.g. Sololearn keyboard tricks), skip —
+                // a zoom scale != 1 means the reported innerWidth is not the real CSS width.
+                if (window.visualViewport && Math.abs(window.visualViewport.scale - 1) > 0.05) {
+                    fitModel();
+                    return;
                 }
+
+                const newW = Math.max(Math.min(window.innerWidth, 480), INITIAL_STABLE_W);
+                const newH = window.innerHeight;
+
+                // Only treat as a real orientation/rotation change if the delta is large (>30px)
+                const widthChanged = Math.abs(newW - _lastStableW) > 30;
+                const heightRestored = newH >= STABLE_H - 10; // keyboard closed = height back to normal
+
+                _lastH = newH;
+
+                if (widthChanged) {
+                    // Real orientation change — update everything
+                    _lastStableW = newW;
+                    STABLE_W = newW;
+                    STABLE_H = newH;
+                    canvasContainer.style.width = STABLE_W + 'px';
+                    canvasContainer.style.height = STABLE_H + 'px';
+                    app.renderer.resize(STABLE_W, STABLE_H);
+                }
+
+                // Always re-anchor model when height is at full (keyboard gone)
+                // This fixes iOS Safari shifting the fixed canvas on keyboard close
+                if (heightRestored || widthChanged) {
+                    canvasContainer.style.top = '0px';
+                    canvasContainer.style.left = '0px';
+                    fitModel();
+                }
+            }
+
+            window.addEventListener('resize', onViewportChange);
+
+            if (window.visualViewport) {
+                window.visualViewport.addEventListener('resize', () => {
+                    if (!app || !model) return;
+
+                    // Skip resize events caused by browser zoom (Sololearn / WebView keyboard quirk)
+                    if (Math.abs(window.visualViewport.scale - 1) > 0.05) {
+                        fitModel();
+                        return;
+                    }
+
+                    const newW = Math.max(Math.min(window.visualViewport.width, 480), INITIAL_STABLE_W);
+                    const newH = window.visualViewport.height;
+                    const widthChanged = Math.abs(newW - _lastStableW) > 30;
+                    const heightRestored = newH >= STABLE_H - 10;
+
+                    if (widthChanged) {
+                        _lastStableW = newW;
+                        STABLE_W = newW;
+                        STABLE_H = newH;
+                        canvasContainer.style.width = STABLE_W + 'px';
+                        canvasContainer.style.height = STABLE_H + 'px';
+                        app.renderer.resize(STABLE_W, STABLE_H);
+                    }
+
+                    if (heightRestored || widthChanged) {
+                        canvasContainer.style.top = '0px';
+                        canvasContainer.style.left = '0px';
+                        fitModel();
+                    }
+                });
+            }
+
+            let scrollTimeout;
+            document.getElementById('chat-history-container').addEventListener('scroll', function () {
+                const container = document.getElementById('canvas-container');
+                container.classList.add('scrolling');
+                clearTimeout(scrollTimeout);
+                scrollTimeout = setTimeout(() => {
+                    container.classList.remove('scrolling');
+                }, 1000);
+
+                if (this.scrollTop === 0 && !isLoadingOlderHistory && hasMoreHistory) loadOlderHistory();
             });
 
             const chatInput = document.getElementById('chat-input');
             const sendBtn = document.getElementById('send-btn');
 
-            // Textarea auto-resize
             chatInput.addEventListener('input', function () {
                 this.style.height = 'auto';
                 this.style.height = Math.min(this.scrollHeight, 100) + 'px';
@@ -1553,35 +1607,24 @@
             async function handleSend() {
                 const text = chatInput.value.trim();
                 if (!text) return;
-
                 window.unlockAudio();
-
                 window.stopCurrentAudio();
-
                 chatInput.value = "";
                 chatInput.style.height = 'auto';
                 sendBtn.disabled = true;
                 sendBtn.innerHTML = '<div class="loading-spinner"></div>';
-
                 appendMessage('user', text);
-
                 try {
                     const reply = await askLLM(text);
                     const ttsText = reply.reply_en;
-
                     if (ttsText) {
                         await window.speakText(
-                            ttsText,
-                            undefined,
-                            "English",
-                            undefined,
-                            reply.reply_en,
-                            reply.reply_en,
+                            ttsText, undefined, "English", undefined,
+                            reply.reply_en, reply.reply_en,
                             reply.emotion || 'neutral',
                             () => appendMessage('hiyori', ttsText)
                         );
                     }
-
                 } catch (err) {
                     console.error(err);
                     window.showSubtitle("Something went wrong...", "");
@@ -1593,14 +1636,11 @@
             }
 
             sendBtn.addEventListener('click', handleSend);
-
             chatInput.addEventListener('keydown', (e) => {
-                if (e.key === "Enter" && !e.shiftKey && !sendBtn.disabled) {
-                    e.preventDefault();
-                    handleSend();
-                }
+                if (e.key === "Enter" && !e.shiftKey && !sendBtn.disabled) { e.preventDefault(); handleSend(); }
             });
 
+            init();
         };
     </script>
 
@@ -1741,6 +1781,15 @@
 
         window.speakJP = (text, speed = 1.0) => window.speakText(text, undefined, "日本語", speed);
         window.speakEN = (text, speed = 0.6) => window.speakText(text, undefined, "English", speed);
+
+        // Prevent pinch-to-zoom from zooming the browser viewport
+        document.addEventListener('gesturestart', e => e.preventDefault(), { passive: false });
+        document.addEventListener('gesturechange', e => e.preventDefault(), { passive: false });
+        document.addEventListener('gestureend', e => e.preventDefault(), { passive: false });
+        document.addEventListener('wheel', e => { if (e.ctrlKey) e.preventDefault(); }, { passive: false });
+        document.addEventListener('touchmove', function (e) {
+            if (e.touches.length > 1) e.preventDefault();
+        }, { passive: false });
     </script>
 </body>
 
