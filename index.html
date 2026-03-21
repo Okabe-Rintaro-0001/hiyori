@@ -101,10 +101,17 @@
         }
 
         .mode-btn.active {
-            background: rgba(102, 126, 234, 0.65);
+            background: rgba(255, 255, 255, 0.2);
             color: #fff;
             border-color: rgba(102, 126, 234, 0.8);
-            font-weight: 600;
+            font-weight: 500;
+        }
+        .add-custom-btn {
+            background: rgba(100, 200, 100, 0.15);
+            border: 1px dashed rgba(255, 255, 255, 0.4);
+        }
+        .add-custom-btn:hover {
+            background: rgba(100, 200, 100, 0.25);
         }
 
         #chat-bar {
@@ -191,6 +198,10 @@
             flex-shrink: 0;
             width: 44px;
             height: 44px;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+            -webkit-touch-callout: none;
         }
 
         #mic-btn:hover { background: rgba(80, 80, 100, 0.8); }
@@ -919,7 +930,13 @@
 
         async function loadModeSelector() {
             try {
-                const res = await fetch(`${BASE_URL}/personalities`);
+                const headers = {};
+                try {
+                    const token = await getToken();
+                    if (token) headers['Authorization'] = `Bearer ${token}`;
+                } catch(e) {}
+            
+                const res = await fetch(`${BASE_URL}/personalities`, { headers });
                 if (!res.ok) { renderModeSelector(FALLBACK_MODES); return; }
                 const modes = await res.json();
                 renderModeSelector(modes && modes.length ? modes : FALLBACK_MODES);
@@ -927,6 +944,74 @@
                 console.warn('[Modes] Failed to load personalities, using defaults:', e.message);
                 renderModeSelector(FALLBACK_MODES);
             }
+        }
+        
+        function openCustomPersonalityModal() {
+            let modal = document.getElementById('custom-personality-modal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'custom-personality-modal';
+                // Clone the exact styling structure of the welcome screen
+                modal.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.6);backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:center;z-index:2000;transition:opacity 0.5s ease;';
+                
+                modal.innerHTML = `
+                    <div class="welcome-card" style="max-width:350px; padding:30px;">
+                        <h2 style="color:#333; margin-bottom:15px; font-size:20px;">Add Custom Hiyori</h2>
+                        <div class="auth-group">
+                            <input type="text" id="cp-name" placeholder="Personality Name (e.g., Tsundere)" maxlength="30" style="margin-bottom:10px;">
+                            <textarea id="cp-prompt" placeholder="Describe how Hiyori should act... (Max 500 chars)" maxlength="500" rows="5" style="width:100%; padding:12px 18px; border:2px solid #eee; border-radius:12px; font-size:14px; outline:none; font-family:inherit; resize:vertical;"></textarea>
+                        </div>
+                        <button id="cp-save-btn" style="margin-top:10px;">Save & Use</button>
+                        <button id="cp-cancel-btn" style="margin-top:10px; background:transparent; color:#888; border:1px solid #ccc; box-shadow:none;">Cancel</button>
+                    </div>
+                `;
+                document.body.appendChild(modal);
+
+                document.getElementById('cp-cancel-btn').onclick = () => {
+                    modal.style.opacity = '0';
+                    setTimeout(() => modal.style.display = 'none', 300);
+                };
+
+                document.getElementById('cp-save-btn').onclick = async () => {
+                    const name = document.getElementById('cp-name').value.trim();
+                    const prompt = document.getElementById('cp-prompt').value.trim();
+                    if (!name || !prompt) return showToast("Name and instructions are required!");
+                    
+                    const btn = document.getElementById('cp-save-btn');
+                    btn.disabled = true;
+                    btn.textContent = "Saving...";
+                    
+                    try {
+                        const token = await getToken();
+                        if (!token) throw new Error("You must be logged in to create custom personalities!");
+                        
+                        const res = await fetch(`${BASE_URL}/profile/personalities`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                            body: JSON.stringify({ name, prompt })
+                        });
+                        const data = await res.json();
+                        if (!res.ok) throw new Error(data.error || "Failed to save");
+                        
+                        showToast("Custom personality saved!");
+                        modal.style.opacity = '0';
+                        setTimeout(() => modal.style.display = 'none', 300);
+                        
+                        lsSet('hiyori_mode', data.id);
+                        await loadModeSelector();
+                    } catch (e) {
+                        showToast(e.message);
+                    } finally {
+                        btn.disabled = false;
+                        btn.textContent = "Save & Use";
+                    }
+                };
+            }
+            document.getElementById('cp-name').value = '';
+            document.getElementById('cp-prompt').value = '';
+            modal.style.display = 'flex';
+            // Slight delay to allow display to apply before fading in
+            setTimeout(() => modal.style.opacity = '1', 10);
         }
 
         const PERSONALITY_THEMES = {
@@ -1011,6 +1096,12 @@
                 };
                 container.appendChild(btn);
             });
+
+            const addCustomBtn = document.createElement('button');
+            addCustomBtn.className = 'mode-btn add-custom-btn';
+            addCustomBtn.innerHTML = '✒ Add Custom';
+            addCustomBtn.onclick = () => openCustomPersonalityModal();
+            container.appendChild(addCustomBtn);
 
             // Set initial background based on active mode
             updateBackground(activeMode);
@@ -1636,6 +1727,9 @@
             let isRecording = false;
             let recognition = null;
             
+            let currentFinal = "";
+            let interimBuffer = "";
+            
             if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
                 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
                 recognition = new SpeechRecognition();
@@ -1644,40 +1738,37 @@
                 recognition.lang = 'en-US';
                 
                 recognition.onresult = (event) => {
-                    let finalTranscript = '';
-                    let interimTranscript = '';
+                    let finalTranscriptChunk = '';
+                    let interimTranscriptChunk = '';
                     for (let i = event.resultIndex; i < event.results.length; ++i) {
-                        if (event.results[i].isFinal) finalTranscript += event.results[i][0].transcript;
-                        else interimTranscript += event.results[i][0].transcript;
+                        if (event.results[i].isFinal) finalTranscriptChunk += event.results[i][0].transcript;
+                        else interimTranscriptChunk += event.results[i][0].transcript;
                     }
-                    if (finalTranscript) {
-                        chatInput.value = (chatInput.value + ' ' + finalTranscript).trim();
-                    } else if (interimTranscript) {
-                        // Optional: Could show interim transcript in a separate div
+                    if (finalTranscriptChunk) {
+                        currentFinal = (currentFinal + ' ' + finalTranscriptChunk).trim();
+                        chatInput.value = currentFinal;
+                        interimBuffer = "";
+                    } else if (interimTranscriptChunk) {
+                        interimBuffer = interimTranscriptChunk;
+                        chatInput.value = (currentFinal + ' ' + interimBuffer).trim();
                     }
+                    // Auto-expand textarea height based on content
+                    chatInput.style.height = 'auto';
+                    chatInput.style.height = Math.min(chatInput.scrollHeight, 100) + 'px';
                 };
             }
 
-            micBtn.addEventListener('click', async () => {
+            async function startRecording() {
+                if (isRecording) return;
                 window.unlockAudio();
                 window.stopCurrentAudio();
-                if (isRecording) {
-                    if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
-                    if (recognition) recognition.stop();
-                    isRecording = false;
-                    micBtn.classList.remove('recording');
-                    micBtn.textContent = '🎤';
-                    return;
-                }
-
+                
                 try {
                     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                     mediaRecorder = new MediaRecorder(stream);
                     audioChunks = [];
                     
-                    mediaRecorder.ondataavailable = e => {
-                        if (e.data.size > 0) audioChunks.push(e.data);
-                    };
+                    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
                     
                     mediaRecorder.onstop = async () => {
                         stream.getTracks().forEach(track => track.stop());
@@ -1695,26 +1786,41 @@
                                 }).catch(e => console.warn("State sync failed", e));
                             } catch (err) { console.warn(err); }
                         };
-                        
-                        // Wait a tiny bit for the final transcript to populate if SpeechRecognition was active
-                        setTimeout(() => {
-                            if (chatInput.value.trim().length > 0) handleSend();
-                        }, 500);
                     };
 
                     mediaRecorder.start();
                     if (recognition) {
+                        currentFinal = "";
+                        interimBuffer = "";
                         chatInput.value = "";
-                        recognition.start();
+                        chatInput.style.height = 'auto';
+                        try { recognition.start(); } catch(e){}
                     }
                     isRecording = true;
                     micBtn.classList.add('recording');
-                    micBtn.innerHTML = '<div style="width:12px;height:12px;background:#fff;border-radius:2px;"></div>';
+                    micBtn.textContent = '🔊';
                 } catch (err) {
                     console.error("Microphone access denied:", err);
                     showToast("Microphone access is required to use voice chat");
                 }
-            });
+            }
+
+            function stopRecording() {
+                if (!isRecording) return;
+                if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+                if (recognition) {
+                    try { recognition.stop(); } catch(e){}
+                }
+                isRecording = false;
+                micBtn.classList.remove('recording');
+                micBtn.textContent = '🎤';
+                // Note: We don't automatically call handleSend() anymore. Users can edit the text and click Send manually!
+            }
+
+            micBtn.addEventListener('contextmenu', e => e.preventDefault());
+            micBtn.addEventListener('pointerdown', startRecording);
+            window.addEventListener('pointerup', stopRecording);
+            window.addEventListener('pointercancel', stopRecording);
 
             chatInput.addEventListener('input', function () {
                 this.style.height = 'auto';
